@@ -4,9 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Выгодная карта | Где поесть дёшево</title>
-    <!-- MapLibre GL JS -->
     <link href="https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.css" rel="stylesheet">
     <script src="https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="./config.js"></script>
     <style>
         * {
             margin: 0;
@@ -211,20 +212,37 @@
             width: 100%;
             text-align: center;
         }
-        .badge {
-            background: #e67e22;
-            border-radius: 60px;
-            padding: 2px 8px;
-            font-size: 0.7rem;
-            font-weight: bold;
-            display: inline-block;
+
+        .status {
+            position: fixed;
+            top: 14px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 30;
+            background: rgba(15, 33, 46, 0.95);
+            border: 1px solid #2d5a6e;
+            color: #eef4ff;
+            padding: 10px 14px;
+            border-radius: 14px;
+            font-size: 0.85rem;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.35);
+            max-width: min(92vw, 520px);
+            display: none;
+        }
+
+        .status.error {
+            border-color: #8b3c2c;
+        }
+
+        .status.success {
+            border-color: #2c6e2c;
         }
     </style>
 </head>
 <body>
     <div id="map"></div>
+    <div id="status" class="status"></div>
     <div class="controls">
-        <button class="btn" id="locateBtn">📍 Моё местоположение</button>
         <button class="btn btn-primary" id="addBtn">➕ Добавить заведение</button>
     </div>
 
@@ -247,61 +265,80 @@
         // ---------- ИНИЦИАЛИЗАЦИЯ КАРТЫ (MapLibre) ----------
         // Бесплатный стиль на основе OpenStreetMap (от Versatiles)
         const mapStyle = 'https://tiles.versatiles.org/assets/styles/colorful/style.json';
-        
         const map = new maplibregl.Map({
             container: 'map',
             style: mapStyle,
-            center: [27.5618, 53.9023], // Минск (центр)
+            center: [27.5618, 53.9023],
             zoom: 12,
             pitch: 0,
         });
-
         map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
-        // ---------- РАБОТА С ДАННЫМИ (localStorage) ----------
-        let places = []; // массив объектов {id, lng, lat, name, price, desc, votesUp, votesDown, createdAt}
+        const SUPABASE_URL = window.SUPABASE_URL || 'PASTE_YOUR_SUPABASE_URL';
+        const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || 'PASTE_YOUR_SUPABASE_ANON_KEY';
+        const SUPABASE_TABLE = 'places';
+        let supabaseClient = null;
+        let statusTimer = null;
 
-        // Загрузка из localStorage
-        function loadPlaces() {
-            const stored = localStorage.getItem('cheapEatsMap');
-            if(stored) {
-                places = JSON.parse(stored);
-            } else {
-                // пара демо-точек для примера (Минск)
-                places = [
-                    {
-                        id: '1',
-                        lng: 27.5618,
-                        lat: 53.9023,
-                        name: 'Столовая «Домашняя»',
-                        price: 'Комплекс 4.90 BYN',
-                        desc: 'Борщ, второе, компот. Скромно, но сытно',
-                        votesUp: 12,
-                        votesDown: 2,
-                        createdAt: Date.now()
-                    },
-                    {
-                        id: '2',
-                        lng: 27.5790,
-                        lat: 53.9100,
-                        name: 'Блинная «Эконом»',
-                        price: 'Блины от 2 BYN',
-                        desc: 'С мясом, творогом, вареньем',
-                        votesUp: 8,
-                        votesDown: 1,
-                        createdAt: Date.now()
-                    }
-                ];
-                savePlaces();
-            }
-            renderMarkers();
+        function showStatus(message, type) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = 'status ' + (type || 'info');
+            statusEl.style.display = 'block';
+            if(statusTimer) clearTimeout(statusTimer);
+            statusTimer = setTimeout(() => {
+                statusEl.style.display = 'none';
+            }, 3500);
         }
+
+        function initSupabase() {
+            const notConfigured = SUPABASE_URL.startsWith('PASTE_') || SUPABASE_ANON_KEY.startsWith('PASTE_');
+            if(notConfigured) {
+                showStatus('Supabase не настроен: используются демо-данные', 'error');
+                return false;
+            }
+            if(!window.supabase || typeof window.supabase.createClient !== 'function') {
+                showStatus('Ошибка загрузки supabase-js', 'error');
+                return false;
+            }
+            supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            return true;
+        }
+
+        let places = [];
+
+        function mapDbRowToPlace(row) {
+            return {
+                id: row.id,
+                lng: row.lng,
+                lat: row.lat,
+                name: row.name,
+                price: row.price,
+                desc: row.description,
+                votesUp: row.votes_up || 0,
+                votesDown: row.votes_down || 0,
+                createdAt: new Date(row.created_at).getTime()
+            };
+        }
+
+        async function loadPlaces() {
+            if(!supabaseClient) {
+                places = [];
+                renderMarkers();
+                return;
+            }
 
         function savePlaces() {
             localStorage.setItem('cheapEatsMap', JSON.stringify(places));
         }
 
-        // Генерация короткого ID
+            places = (data || []).map(mapDbRowToPlace);
+            renderMarkers();
+            if(places.length === 0) {
+                showStatus('Пока нет точек. Добавьте первое заведение', 'info');
+            }
+        }
+
         function generateId() {
             return Date.now() + '-' + Math.random().toString(36).substr(2, 6);
         }
@@ -312,6 +349,7 @@
                 alert('Укажите название заведения');
                 return false;
             }
+
             const newPlace = {
                 id: generateId(),
                 lng: lng,
@@ -329,31 +367,44 @@
             return true;
         }
 
-        // Голосование
-        function vote(placeId, isUp) {
-            const place = places.find(p => p.id === placeId);
-            if(place) {
-                if(isUp) place.votesUp = (place.votesUp || 0) + 1;
-                else place.votesDown = (place.votesDown || 0) + 1;
-                savePlaces();
-                renderMarkers(); // перерисовка для обновления попапов
-                // небольшая хитрость: закрыть все попапы? но лучше обновить данные в открытом попапе
-                // Для простоты: закрываем все попапы, чтобы при клике показать новые цифры
-                closeAllPopups();
-            }
+        async function vote(placeId, isUp) {
+            const place = places.find((p) => p.id === placeId);
+            if(!place) return;
+
+            if(isUp) place.votesUp = (place.votesUp || 0) + 1;
+            else place.votesDown = (place.votesDown || 0) + 1;
+
+            renderMarkers();
+            closeAllPopups();
+
+            if(!supabaseClient) return;
+            const { error } = await supabaseClient
+                .from(SUPABASE_TABLE)
+                .update({ votes_up: place.votesUp, votes_down: place.votesDown })
+                .eq('id', place.id);
+            if(error) showStatus('Не удалось обновить голоса', 'error');
         }
 
-        // Удаление заведения
-        function deletePlace(placeId) {
-            if(confirm('Удалить эту точку?')) {
-                places = places.filter(p => p.id !== placeId);
-                savePlaces();
-                renderMarkers();
-                closeAllPopups();
+        async function deletePlace(placeId) {
+            if(!confirm('Удалить эту точку?')) return;
+
+            if(supabaseClient) {
+                const { error } = await supabaseClient
+                    .from(SUPABASE_TABLE)
+                    .delete()
+                    .eq('id', placeId);
+                if(error) {
+                    showStatus('Не удалось удалить в Supabase', 'error');
+                    return;
+                }
             }
+
+            places = places.filter((p) => p.id !== placeId);
+            renderMarkers();
+            closeAllPopups();
+            showStatus('Точка удалена', 'success');
         }
 
-        // Закрыть все открытые попапы
         function closeAllPopups() {
             if(window.currentPopup) {
                 window.currentPopup.remove();
@@ -361,17 +412,12 @@
             }
         }
 
-        // ---------- ОТРИСОВКА МАРКЕРОВ ----------
         let currentMarkers = [];
-
         function renderMarkers() {
-            // Удаляем старые маркеры
-            currentMarkers.forEach(marker => marker.remove());
+            currentMarkers.forEach((marker) => marker.remove());
             currentMarkers = [];
-            
-            // Для каждого места создаём маркер
-            places.forEach(place => {
-                // Создаём HTML-элемент маркера
+
+            places.forEach((place) => {
                 const el = document.createElement('div');
                 el.className = 'custom-marker';
                 el.innerHTML = '🍜';
@@ -379,29 +425,26 @@
                 el.style.cursor = 'pointer';
                 el.style.filter = 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))';
                 el.style.textShadow = '0 0 2px black';
-                
+
                 const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
                     .setLngLat([place.lng, place.lat])
                     .addTo(map);
-                
-                // Создаём попап (контент генерируется динамически)
+
                 const popup = new maplibregl.Popup({ offset: 25, closeButton: true, closeOnClick: false })
                     .setHTML(generatePopupHTML(place));
-                
-                // При клике на маркер показываем попап
+
                 marker.getElement().addEventListener('click', (e) => {
                     e.stopPropagation();
                     closeAllPopups();
-                    // обновляем содержимое попапа (чтобы голоса были свежими)
                     popup.setHTML(generatePopupHTML(place));
                     window.currentPopup = popup;
                     marker.setPopup(popup).togglePopup();
                 });
-                
+
                 currentMarkers.push(marker);
             });
         }
-        
+
         function generatePopupHTML(place) {
             return `
                 <div>
@@ -412,13 +455,12 @@
                         <button class="vote-btn vote-up" data-id="${place.id}" data-vote="up">👍 ${place.votesUp}</button>
                         <button class="vote-btn vote-down" data-id="${place.id}" data-vote="down">👎 ${place.votesDown}</button>
                     </div>
-                    <button class="vote-btn delete-btn" data-id="${place.id}" data-delete="1">🗑️ Удалить</button>
+                    <button class="vote-btn delete-btn" data-id="${place.id}">🗑️ Удалить</button>
                     <div style="font-size:10px; margin-top:6px; opacity:0.5;">добавлено ${new Date(place.createdAt).toLocaleDateString()}</div>
                 </div>
             `;
         }
-        
-        // Простейшая защита от XSS
+
         function escapeHtml(str) {
             if(!str) return '';
             return str.replace(/[&<>]/g, function(m) {
@@ -426,15 +468,11 @@
                 if(m === '<') return '&lt;';
                 if(m === '>') return '&gt;';
                 return m;
-            }).replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, function(c) {
-                return c;
             });
         }
-        
-        // Обработка кликов по кнопкам в попапе (делегирование)
+
         document.body.addEventListener('click', (e) => {
             const target = e.target;
-            // Голосование
             if(target.classList && target.classList.contains('vote-btn')) {
                 const placeId = target.getAttribute('data-id');
                 const voteType = target.getAttribute('data-vote');
@@ -444,7 +482,6 @@
                     vote(placeId, voteType === 'up');
                 }
             }
-            // Удаление
             if(target.classList && target.classList.contains('delete-btn')) {
                 const placeId = target.getAttribute('data-id');
                 if(placeId) {
@@ -454,40 +491,12 @@
                 }
             }
         });
-        
-        // ---------- ГЕОЛОКАЦИЯ ----------
-        function locateUser() {
-            if(!navigator.geolocation) {
-                alert('Ваш браузер не поддерживает геолокацию');
-                return;
-            }
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    const { latitude, longitude } = position.coords;
-                    map.flyTo({ center: [longitude, latitude], zoom: 15, duration: 1500 });
-                    // добавим временный маркер "Вы здесь" — для простоты используем стандартный
-                    if(window.userMarker) window.userMarker.remove();
-                    const userEl = document.createElement('div');
-                    userEl.innerHTML = '📍';
-                    userEl.style.fontSize = '28px';
-                    userEl.style.filter = 'drop-shadow(0 0 2px #00aaff)';
-                    window.userMarker = new maplibregl.Marker({ element: userEl })
-                        .setLngLat([longitude, latitude])
-                        .addTo(map);
-                },
-                (err) => {
-                    alert('Ошибка геолокации: ' + err.message);
-                }
-            );
-        }
-        
-        // ---------- ДОБАВЛЕНИЕ ЧЕРЕЗ КЛИК НА КАРТЕ ----------
+
         let pendingCoordinates = null;
         let isAddingMode = false;
-        
+
         function enableAddMode() {
             if(isAddingMode) {
-                // отключаем режим
                 isAddingMode = false;
                 map.getCanvas().style.cursor = '';
                 document.getElementById('addBtn').classList.remove('btn-primary');
@@ -499,7 +508,7 @@
             map.getCanvas().style.cursor = 'crosshair';
             document.getElementById('addBtn').classList.add('btn-primary');
             alert('Кликните по карте в том месте, где находится заведение');
-            // Ожидаем клик
+
             const onClickMap = (e) => {
                 if(!isAddingMode) {
                     map.off('click', onClickMap);
@@ -507,7 +516,6 @@
                 }
                 const { lng, lat } = e.lngLat;
                 pendingCoordinates = { lng, lat };
-                // Открыть модалку
                 document.getElementById('placeName').value = '';
                 document.getElementById('priceInfo').value = '';
                 document.getElementById('description').value = '';
@@ -519,9 +527,8 @@
             };
             map.on('click', onClickMap);
         }
-        
-        // Сохранение из модалки
-        function submitNewPlace() {
+
+        async function submitNewPlace() {
             if(!pendingCoordinates) {
                 alert('Сначала кликните на карте, чтобы указать местоположение');
                 return;
@@ -529,34 +536,30 @@
             const name = document.getElementById('placeName').value;
             const price = document.getElementById('priceInfo').value;
             const desc = document.getElementById('description').value;
-            const success = addPlace(pendingCoordinates.lng, pendingCoordinates.lat, name, price, desc);
+            const success = await addPlace(pendingCoordinates.lng, pendingCoordinates.lat, name, price, desc);
             if(success) {
                 closeModal();
                 pendingCoordinates = null;
             }
         }
-        
+
         function closeModal() {
             document.getElementById('modal').classList.remove('active');
             pendingCoordinates = null;
         }
-        
-        // ---------- ИНИЦИАЛИЗАЦИЯ ИНТЕРФЕЙСА ----------
-        document.getElementById('locateBtn').addEventListener('click', locateUser);
+
         document.getElementById('addBtn').addEventListener('click', enableAddMode);
         document.getElementById('submitPlace').addEventListener('click', submitNewPlace);
         document.getElementById('cancelModal').addEventListener('click', closeModal);
-        // Закрыть модалку при клике на фон
         document.getElementById('modal').addEventListener('click', (e) => {
             if(e.target === document.getElementById('modal')) closeModal();
         });
-        
-        // ждём загрузку карты
-        map.on('load', () => {
-            loadPlaces();
+
+        map.on('load', async () => {
+            initSupabase();
+            await loadPlaces();
         });
-        
-        // при клике на карту закрываем попап, если режим не активен
+
         map.on('click', () => {
             if(!isAddingMode) closeAllPopups();
         });
