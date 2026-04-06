@@ -8,6 +8,7 @@
         center: [27.5618, 53.9023],
         zoom: 12,
         pitch: 0,
+        attributionControl: false,
     });
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
@@ -43,6 +44,305 @@
     }
 
     let places = [];
+
+    const PRICE_SLIDER_MIN = 0;
+    const PRICE_SLIDER_MAX = 50000;
+    let appliedPriceMin = PRICE_SLIDER_MIN;
+    let appliedPriceMax = PRICE_SLIDER_MAX;
+    let appliedNameQuery = '';
+    /** Показывать эту точку на карте, даже если её отсекает фильтр цены (после выбора в диалоге). */
+    let focusBypassId = null;
+    let markerByPlaceId = {};
+    let searchListDebounceTimer = null;
+    /** Текст чипа под кнопками после перехода к заведению из поиска */
+    let mapSearchChipText = null;
+    let mapSearchChipPlaceId = null;
+
+    function updateMapSearchChip() {
+        const wrap = document.getElementById('mapSearchChipWrap');
+        const label = document.getElementById('mapSearchChipLabel');
+        if(!wrap || !label) return;
+        const t = mapSearchChipText && String(mapSearchChipText).trim();
+        if(t) {
+            label.textContent = t;
+            wrap.hidden = false;
+        } else {
+            label.textContent = '';
+            wrap.hidden = true;
+        }
+    }
+
+    function dismissMapSearchChip() {
+        mapSearchChipText = null;
+        mapSearchChipPlaceId = null;
+        appliedNameQuery = '';
+        clearFocusBypass();
+        const input = document.getElementById('nameSearchInput');
+        if(input) input.value = '';
+        closeAllPopups();
+        renderMarkers();
+        updateMapSearchChip();
+    }
+
+    function clearMapSearchChipState() {
+        mapSearchChipText = null;
+        mapSearchChipPlaceId = null;
+        updateMapSearchChip();
+    }
+
+    function parsePriceNumbers(priceStr) {
+        if(!priceStr || typeof priceStr !== 'string') return [];
+        const matches = priceStr.match(/\d+(?:[.,]\d+)?/g);
+        if(!matches) return [];
+        return matches.map(function(m) {
+            return parseFloat(m.replace(',', '.'));
+        }).filter(function(n) {
+            return !isNaN(n);
+        });
+    }
+
+    function isFullPriceRange(minV, maxV) {
+        return minV <= PRICE_SLIDER_MIN && maxV >= PRICE_SLIDER_MAX;
+    }
+
+    function placePassesPriceFilter(place) {
+        if(isFullPriceRange(appliedPriceMin, appliedPriceMax)) return true;
+        const nums = parsePriceNumbers(place.price);
+        if(nums.length === 0) return false;
+        return nums.some(function(n) {
+            return n >= appliedPriceMin && n <= appliedPriceMax;
+        });
+    }
+
+    function placePassesNameFilter(place) {
+        const q = appliedNameQuery.trim().toLowerCase();
+        if(!q) return true;
+        return (place.name || '').toLowerCase().indexOf(q) !== -1;
+    }
+
+    function getVisiblePlaces() {
+        return places.filter(function(p) {
+            if(focusBypassId != null && String(p.id) === String(focusBypassId)) return true;
+            return placePassesPriceFilter(p) && placePassesNameFilter(p);
+        });
+    }
+
+    function clearFocusBypass() {
+        focusBypassId = null;
+    }
+
+    function refreshSearchResultsList() {
+        const list = document.getElementById('searchResultsList');
+        const hint = document.getElementById('searchResultsHint');
+        const input = document.getElementById('nameSearchInput');
+        if(!list) return;
+        const q = (input && input.value || '').trim().toLowerCase();
+        list.innerHTML = '';
+        if(!q) {
+            if(hint) {
+                hint.textContent = 'Введите название — ниже появятся совпадения. Нажмите на строку, чтобы перейти к маркеру.';
+            }
+            return;
+        }
+        const matches = places.filter(function(p) {
+            return (p.name || '').toLowerCase().indexOf(q) !== -1;
+        });
+        if(hint) {
+            hint.textContent = matches.length
+                ? 'Найдено: ' + matches.length + '. Нажмите строку — карта перейдёт к маркеру.'
+                : 'Ничего не найдено. Попробуйте другой запрос.';
+        }
+        matches.forEach(function(place) {
+            const li = document.createElement('li');
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'search-result-item';
+            btn.setAttribute('data-place-id', String(place.id));
+            btn.setAttribute('role', 'option');
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'search-result-name';
+            nameSpan.textContent = place.name || '—';
+            const priceSpan = document.createElement('span');
+            priceSpan.className = 'search-result-price';
+            priceSpan.textContent = place.price || '—';
+            btn.appendChild(nameSpan);
+            btn.appendChild(priceSpan);
+            li.appendChild(btn);
+            list.appendChild(li);
+        });
+    }
+
+    function scheduleRefreshSearchResultsList() {
+        if(searchListDebounceTimer) clearTimeout(searchListDebounceTimer);
+        searchListDebounceTimer = setTimeout(function() {
+            searchListDebounceTimer = null;
+            refreshSearchResultsList();
+        }, 200);
+    }
+
+    function openPopupForPlaceId(placeId) {
+        const key = String(placeId);
+        const marker = markerByPlaceId[key];
+        if(!marker) return;
+        closeAllPopups();
+        const popup = marker.getPopup();
+        if(!popup) return;
+        window.currentPopup = popup;
+        marker.togglePopup();
+    }
+
+    function focusPlaceOnMap(place) {
+        const input = document.getElementById('nameSearchInput');
+        appliedNameQuery = input ? input.value.trim() : '';
+        const passesPrice = placePassesPriceFilter(place);
+        const passesName = (function() {
+            const q = appliedNameQuery.trim().toLowerCase();
+            if(!q) return true;
+            return (place.name || '').toLowerCase().indexOf(q) !== -1;
+        })();
+        focusBypassId = passesPrice && passesName ? null : place.id;
+        mapSearchChipText = (place.name || '').trim() || '—';
+        mapSearchChipPlaceId = place.id;
+        updateMapSearchChip();
+        closeGlassModal('modalSearch');
+        closeAllPopups();
+        renderMarkers();
+        const targetZoom = Math.max(map.getZoom(), 15);
+        map.flyTo({
+            center: [place.lng, place.lat],
+            zoom: targetZoom,
+            essential: true
+        });
+        let opened = false;
+        function tryOpenPopup() {
+            if(opened) return;
+            opened = true;
+            openPopupForPlaceId(place.id);
+        }
+        map.once('moveend', tryOpenPopup);
+        setTimeout(tryOpenPopup, 900);
+    }
+
+    function formatRuNum(n) {
+        return Math.round(n).toLocaleString('ru-RU');
+    }
+
+    function updatePriceRangeLabel() {
+        const minEl = document.getElementById('priceRangeMin');
+        const maxEl = document.getElementById('priceRangeMax');
+        const label = document.getElementById('priceRangeLabel');
+        if(!minEl || !maxEl || !label) return;
+        label.textContent = formatRuNum(+minEl.value) + ' — ' + formatRuNum(+maxEl.value);
+    }
+
+    function updateDualRangeTrack() {
+        const minEl = document.getElementById('priceRangeMin');
+        const maxEl = document.getElementById('priceRangeMax');
+        const track = document.getElementById('dualRangeTrack');
+        if(!minEl || !maxEl || !track) return;
+        const minv = +minEl.value;
+        const maxv = +maxEl.value;
+        const span = PRICE_SLIDER_MAX - PRICE_SLIDER_MIN;
+        const p1 = span ? ((minv - PRICE_SLIDER_MIN) / span) * 100 : 0;
+        const p2 = span ? ((maxv - PRICE_SLIDER_MIN) / span) * 100 : 100;
+        track.style.background = 'linear-gradient(to right, #d8dbe8 ' + p1 + '%, #1a1c2e ' + p1 + '%, #1a1c2e ' + p2 + '%, #d8dbe8 ' + p2 + '%)';
+    }
+
+    function syncDualRangeFromInputs() {
+        const minEl = document.getElementById('priceRangeMin');
+        const maxEl = document.getElementById('priceRangeMax');
+        if(!minEl || !maxEl) return;
+        let minv = +minEl.value;
+        let maxv = +maxEl.value;
+        if(minv > maxv) {
+            minv = maxv;
+            minEl.value = String(minv);
+        }
+        updatePriceRangeLabel();
+        updateDualRangeTrack();
+    }
+
+    function openGlassModal(id) {
+        const el = document.getElementById(id);
+        if(!el) return;
+        el.classList.add('active');
+        el.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeGlassModal(id) {
+        const el = document.getElementById(id);
+        if(!el) return;
+        el.classList.remove('active');
+        el.setAttribute('aria-hidden', 'true');
+    }
+
+    function openPriceFilterModal() {
+        const minEl = document.getElementById('priceRangeMin');
+        const maxEl = document.getElementById('priceRangeMax');
+        if(minEl && maxEl) {
+            minEl.value = String(Math.max(PRICE_SLIDER_MIN, Math.min(appliedPriceMin, PRICE_SLIDER_MAX)));
+            maxEl.value = String(Math.max(PRICE_SLIDER_MIN, Math.min(appliedPriceMax, PRICE_SLIDER_MAX)));
+            if(+minEl.value > +maxEl.value) maxEl.value = minEl.value;
+        }
+        updatePriceRangeLabel();
+        updateDualRangeTrack();
+        openGlassModal('modalPrice');
+    }
+
+    function applyPriceFilterFromUi() {
+        const minEl = document.getElementById('priceRangeMin');
+        const maxEl = document.getElementById('priceRangeMax');
+        if(!minEl || !maxEl) return;
+        appliedPriceMin = +minEl.value;
+        appliedPriceMax = +maxEl.value;
+        if(appliedPriceMin > appliedPriceMax) {
+            const t = appliedPriceMin;
+            appliedPriceMin = appliedPriceMax;
+            appliedPriceMax = t;
+        }
+        clearFocusBypass();
+        clearMapSearchChipState();
+        closeGlassModal('modalPrice');
+        closeAllPopups();
+        renderMarkers();
+        const visible = getVisiblePlaces();
+        const hidden = places.length - visible.length;
+        if(hidden > 0) {
+            showStatus('Показано ' + visible.length + ' из ' + places.length + ' точек', 'info');
+        }
+    }
+
+    function applyNameSearchFromUi() {
+        const input = document.getElementById('nameSearchInput');
+        appliedNameQuery = input ? input.value : '';
+        clearFocusBypass();
+        closeGlassModal('modalSearch');
+        closeAllPopups();
+        renderMarkers();
+        const matches = places.filter(function(p) {
+            return placePassesPriceFilter(p) && placePassesNameFilter(p);
+        });
+        if(appliedNameQuery.trim() && matches.length === 1) {
+            focusPlaceOnMap(matches[0]);
+            return;
+        }
+        clearMapSearchChipState();
+        const vis = getVisiblePlaces().length;
+        if(appliedNameQuery.trim()) {
+            showStatus(vis ? 'Найдено: ' + vis : 'Ничего не найдено', vis ? 'success' : 'info');
+        }
+    }
+
+    function clearNameSearchUi() {
+        const input = document.getElementById('nameSearchInput');
+        if(input) input.value = '';
+        appliedNameQuery = '';
+        clearFocusBypass();
+        clearMapSearchChipState();
+        closeGlassModal('modalSearch');
+        closeAllPopups();
+        renderMarkers();
+    }
 
     function mapDbRowToPlace(row) {
         return {
@@ -171,6 +471,10 @@
         }
 
         places = places.filter((p) => p.id !== placeId);
+        if(focusBypassId != null && String(focusBypassId) === String(placeId)) clearFocusBypass();
+        if(mapSearchChipPlaceId != null && String(mapSearchChipPlaceId) === String(placeId)) {
+            clearMapSearchChipState();
+        }
         renderMarkers();
         closeAllPopups();
         showStatus('Точка удалена', 'success');
@@ -187,8 +491,9 @@
     function renderMarkers() {
         currentMarkers.forEach((marker) => marker.remove());
         currentMarkers = [];
+        markerByPlaceId = {};
 
-        places.forEach((place) => {
+        getVisiblePlaces().forEach((place) => {
             const el = document.createElement('div');
             el.className = 'custom-marker';
             el.innerHTML = '🍜';
@@ -213,6 +518,7 @@
             });
 
             currentMarkers.push(marker);
+            markerByPlaceId[String(place.id)] = marker;
         });
     }
 
@@ -326,12 +632,91 @@
         if(e.target === document.getElementById('modal')) closeModal();
     });
 
+    (function setupGlassModals() {
+        const minEl = document.getElementById('priceRangeMin');
+        const maxEl = document.getElementById('priceRangeMax');
+        if(minEl && maxEl) {
+            ['input', 'change'].forEach(function(ev) {
+                minEl.addEventListener(ev, syncDualRangeFromInputs);
+                maxEl.addEventListener(ev, syncDualRangeFromInputs);
+            });
+        }
+
+        document.getElementById('openPriceFilter').addEventListener('click', function() {
+            openPriceFilterModal();
+        });
+        document.getElementById('openNameSearch').addEventListener('click', function() {
+            const input = document.getElementById('nameSearchInput');
+            if(input) input.value = appliedNameQuery;
+            openGlassModal('modalSearch');
+            refreshSearchResultsList();
+            setTimeout(function() {
+                if(input) input.focus();
+            }, 100);
+        });
+
+        document.getElementById('nameSearchInput').addEventListener('input', function() {
+            scheduleRefreshSearchResultsList();
+        });
+
+        document.getElementById('searchResultsList').addEventListener('click', function(e) {
+            const btn = e.target.closest('.search-result-item');
+            if(!btn) return;
+            const id = btn.getAttribute('data-place-id');
+            const place = places.find(function(p) {
+                return String(p.id) === String(id);
+            });
+            if(place) focusPlaceOnMap(place);
+        });
+        document.getElementById('closePriceModal').addEventListener('click', function() {
+            closeGlassModal('modalPrice');
+        });
+        document.getElementById('closeSearchModal').addEventListener('click', function() {
+            closeGlassModal('modalSearch');
+        });
+        document.getElementById('applyPriceFilter').addEventListener('click', applyPriceFilterFromUi);
+        document.getElementById('applyNameSearch').addEventListener('click', applyNameSearchFromUi);
+        document.getElementById('clearNameSearch').addEventListener('click', clearNameSearchUi);
+        document.getElementById('mapSearchChipDismiss').addEventListener('click', function(e) {
+            e.stopPropagation();
+            dismissMapSearchChip();
+        });
+
+        document.getElementById('modalPrice').addEventListener('click', function(e) {
+            if(e.target === document.getElementById('modalPrice')) closeGlassModal('modalPrice');
+        });
+        document.getElementById('modalSearch').addEventListener('click', function(e) {
+            if(e.target === document.getElementById('modalSearch')) closeGlassModal('modalSearch');
+        });
+
+        document.getElementById('nameSearchInput').addEventListener('keydown', function(e) {
+            if(e.key === 'Enter') {
+                e.preventDefault();
+                applyNameSearchFromUi();
+            }
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if(e.key !== 'Escape') return;
+            closeGlassModal('modalPrice');
+            closeGlassModal('modalSearch');
+        });
+
+        updatePriceRangeLabel();
+        updateDualRangeTrack();
+    })();
+
     map.on('load', async () => {
         initSupabase();
         await loadPlaces();
     });
 
     map.on('click', () => {
-        if(!isAddingMode) closeAllPopups();
+        if(isAddingMode) return;
+        closeAllPopups();
+        if(focusBypassId != null) {
+            clearFocusBypass();
+            renderMarkers();
+        }
     });
 })();

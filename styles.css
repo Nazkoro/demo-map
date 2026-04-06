@@ -18,6 +18,420 @@ body {
     height: 100%;
 }
 
+/* Скрыть блок атрибуции MapLibre / OSM (дублирует attributionControl: false) */
+.maplibregl-ctrl-attrib,
+.maplibregl-ctrl-attrib-button {
+    display: none !important;
+}
+
+/* Zoom / compass: по центру правого края */
+.maplibregl-ctrl-top-right {
+    top: 50%;
+    transform: translateY(-50%);
+    margin-top: 0;
+}
+
+/* Фильтр и поиск: у верхнего правого угла */
+.map-fab-stack {
+    position: fixed;
+    top: max(12px, calc(env(safe-area-inset-top, 0px) + 8px));
+    right: 12px;
+    z-index: 15;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 10px;
+    pointer-events: none;
+}
+
+.map-search-chip-wrap {
+    pointer-events: auto;
+    max-width: min(280px, calc(100vw - 56px));
+}
+
+.map-search-chip {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 4px 6px 14px;
+    border-radius: 999px;
+    background: rgba(55, 58, 74, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+}
+
+.map-search-chip-label {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.map-search-chip-dismiss {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: #fff;
+    font-size: 1.35rem;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+}
+
+.map-search-chip-dismiss:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.map-fab {
+    pointer-events: auto;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: none;
+    background: #1a1c2e;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.map-fab:hover {
+    background: #252845;
+    transform: scale(1.05);
+}
+
+.map-fab:active {
+    transform: scale(0.98);
+}
+
+/* Glass modals (price filter + name search) */
+.modal-glass {
+    background: rgba(15, 20, 35, 0.45);
+    backdrop-filter: blur(8px);
+}
+
+.modal-glass .glass-modal-card {
+    background: rgba(255, 255, 255, 0.88);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-radius: 24px;
+    max-width: 92vw;
+    width: 400px;
+    padding: 22px 22px 20px;
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.22), 0 0 0 1px rgba(255, 255, 255, 0.5) inset;
+    color: #1a1c2e;
+}
+
+.glass-modal-card--search {
+    width: min(420px, 92vw);
+}
+
+.glass-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.glass-modal-head h3 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+.glass-modal-close {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(26, 28, 46, 0.08);
+    color: #1a1c2e;
+    font-size: 1.35rem;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+}
+
+.glass-modal-close:hover {
+    background: rgba(26, 28, 46, 0.14);
+}
+
+.glass-modal-label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+
+.glass-range-value {
+    font-weight: 700;
+    color: #3d4266;
+}
+
+.glass-modal-hint {
+    font-size: 0.75rem;
+    color: #5c6178;
+    line-height: 1.45;
+    margin-top: 14px;
+    margin-bottom: 4px;
+}
+
+.dual-range {
+    position: relative;
+    height: 40px;
+    margin-top: 8px;
+}
+
+.dual-range-track {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    height: 6px;
+    border-radius: 3px;
+    background: #d8dbe8;
+    pointer-events: none;
+}
+
+.dual-range-input {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    width: 100%;
+    height: 40px;
+    margin: 0;
+    background: none;
+    pointer-events: none;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.dual-range-min {
+    z-index: 2;
+}
+
+.dual-range-max {
+    z-index: 3;
+}
+
+.dual-range-input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    pointer-events: auto;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #1a1c2e;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+}
+
+.dual-range-input::-moz-range-thumb {
+    pointer-events: auto;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #1a1c2e;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+}
+
+.dual-range-input::-webkit-slider-runnable-track {
+    height: 6px;
+    background: transparent;
+}
+
+.dual-range-input::-moz-range-track {
+    height: 6px;
+    background: transparent;
+}
+
+.dual-range-scale {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: #6b7089;
+    margin-top: 4px;
+}
+
+.glass-btn-apply {
+    width: 100%;
+    margin-top: 18px;
+    padding: 14px 20px;
+    border: none;
+    border-radius: 14px;
+    background: #1a1c2e;
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.85rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+}
+
+.glass-btn-apply:hover {
+    background: #252845;
+}
+
+.glass-btn-apply:active {
+    transform: scale(0.99);
+}
+
+.glass-search-field {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #fff;
+    border: 1px solid #e2e4ee;
+    border-radius: 16px;
+    padding: 10px 14px;
+    margin-bottom: 16px;
+}
+
+.glass-search-icon {
+    flex-shrink: 0;
+    color: #8b90a8;
+}
+
+.glass-search-field input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-size: 1rem;
+    font-family: inherit;
+    color: #1a1c2e;
+    background: transparent;
+    min-width: 0;
+}
+
+.glass-search-field input::placeholder {
+    color: #9aa0b8;
+}
+
+.search-results-hint {
+    font-size: 0.72rem;
+    color: #6b7089;
+    line-height: 1.4;
+    margin-bottom: 8px;
+}
+
+.search-results-list {
+    list-style: none;
+    max-height: min(40vh, 220px);
+    overflow-y: auto;
+    margin: 0 0 14px;
+    padding: 0;
+    border-radius: 14px;
+    border: 1px solid #e8eaf2;
+    background: rgba(255, 255, 255, 0.6);
+}
+
+.search-results-list:empty {
+    display: none;
+}
+
+.search-result-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 14px;
+    border: none;
+    border-bottom: 1px solid #eef0f6;
+    background: transparent;
+    font-family: inherit;
+    font-size: 0.9rem;
+    text-align: left;
+    cursor: pointer;
+    color: #1a1c2e;
+    transition: background 0.12s;
+}
+
+.search-result-item:last-child {
+    border-bottom: none;
+}
+
+.search-result-item:hover,
+.search-result-item:focus-visible {
+    background: rgba(26, 28, 46, 0.06);
+    outline: none;
+}
+
+.search-result-name {
+    font-weight: 600;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.search-result-price {
+    flex-shrink: 0;
+    font-size: 0.78rem;
+    color: #5c6178;
+    max-width: 42%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.glass-modal-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.glass-modal-actions button {
+    flex: 1;
+    padding: 12px 16px;
+    border-radius: 14px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    border: none;
+    transition: background 0.15s, transform 0.1s;
+}
+
+.glass-btn-secondary {
+    background: #eef0f6;
+    color: #1a1c2e;
+}
+
+.glass-btn-secondary:hover {
+    background: #e2e5ef;
+}
+
+.glass-btn-primary {
+    background: #1a1c2e;
+    color: #fff;
+}
+
+.glass-btn-primary:hover {
+    background: #252845;
+}
+
 .controls {
     position: absolute;
     bottom: 24px;
