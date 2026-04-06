@@ -294,7 +294,7 @@
         function initSupabase() {
             const notConfigured = SUPABASE_URL.startsWith('PASTE_') || SUPABASE_ANON_KEY.startsWith('PASTE_');
             if(notConfigured) {
-                showStatus('Supabase не настроен: используются демо-данные', 'error');
+                showStatus('Supabase не настроен: проверьте config.js', 'error');
                 return false;
             }
             if(!window.supabase || typeof window.supabase.createClient !== 'function') {
@@ -328,9 +328,17 @@
                 return;
             }
 
-        function savePlaces() {
-            localStorage.setItem('cheapEatsMap', JSON.stringify(places));
-        }
+            const { data, error } = await supabaseClient
+                .from(SUPABASE_TABLE)
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if(error) {
+                places = [];
+                renderMarkers();
+                showStatus('Не удалось загрузить данные: ' + error.message, 'error');
+                return;
+            }
 
             places = (data || []).map(mapDbRowToPlace);
             renderMarkers();
@@ -343,8 +351,7 @@
             return Date.now() + '-' + Math.random().toString(36).substr(2, 6);
         }
 
-        // Добавить новое место
-        function addPlace(lng, lat, name, price, desc) {
+        async function addPlace(lng, lat, name, price, desc) {
             if(!name.trim()) {
                 alert('Укажите название заведения');
                 return false;
@@ -361,8 +368,35 @@
                 votesDown: 0,
                 createdAt: Date.now()
             };
-            places.push(newPlace);
-            savePlaces();
+
+            if(supabaseClient) {
+                const { data, error } = await supabaseClient
+                    .from(SUPABASE_TABLE)
+                    .insert({
+                        id: newPlace.id,
+                        name: newPlace.name,
+                        price: newPlace.price,
+                        description: newPlace.desc,
+                        lng: newPlace.lng,
+                        lat: newPlace.lat,
+                        votes_up: newPlace.votesUp,
+                        votes_down: newPlace.votesDown,
+                        created_at: new Date(newPlace.createdAt).toISOString()
+                    })
+                    .select()
+                    .single();
+
+                if(error) {
+                    showStatus('Ошибка сохранения: ' + error.message, 'error');
+                    return false;
+                }
+                places.unshift(mapDbRowToPlace(data));
+                showStatus('Место сохранено в Supabase', 'success');
+            } else {
+                places.push(newPlace);
+                showStatus('Сохранено локально (без Supabase)', 'info');
+            }
+
             renderMarkers();
             return true;
         }
