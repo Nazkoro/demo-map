@@ -1,0 +1,242 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    background: #1a2a32;
+    color: #eef4ff;
+}
+
+#map {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.controls {
+    position: absolute;
+    bottom: 24px;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    z-index: 10;
+    padding: 0 16px;
+    pointer-events: none;
+}
+
+.btn {
+    pointer-events: auto;
+    background: #0f212e;
+    backdrop-filter: blur(12px);
+    background-color: rgba(15, 33, 46, 0.9);
+    border: 1px solid #2d4a5f;
+    color: white;
+    padding: 12px 20px;
+    border-radius: 60px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: 0.2s;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-primary {
+    background: #e67e22;
+    border-color: #f39c12;
+    color: white;
+    box-shadow: 0 2px 8px rgba(230,126,34,0.3);
+}
+
+.btn-primary:hover {
+    background: #f39c12;
+    transform: scale(1.02);
+}
+
+.btn:hover {
+    background: #1e3a4a;
+}
+
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+    visibility: hidden;
+    opacity: 0;
+    transition: 0.2s ease;
+}
+
+.modal.active {
+    visibility: visible;
+    opacity: 1;
+}
+
+.modal-card {
+    background: #0f212e;
+    border-radius: 32px;
+    max-width: 92%;
+    width: 420px;
+    padding: 24px;
+    border: 1px solid #2d5a6e;
+    box-shadow: 0 20px 35px rgba(0,0,0,0.5);
+}
+
+.modal-card h3 {
+    font-size: 1.7rem;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.modal-hint {
+    font-size: 0.8rem;
+}
+
+.modal-card input, .modal-card textarea {
+    width: 100%;
+    background: #07161f;
+    border: 1px solid #2d5a6e;
+    padding: 12px 14px;
+    border-radius: 24px;
+    color: white;
+    font-size: 1rem;
+    margin-top: 12px;
+    font-family: inherit;
+}
+
+.modal-card textarea {
+    resize: vertical;
+    min-height: 70px;
+}
+
+.modal-buttons {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+}
+
+.modal-buttons button {
+    flex: 1;
+    padding: 10px;
+    border-radius: 40px;
+    font-weight: bold;
+    cursor: pointer;
+    border: none;
+}
+
+.btn-submit {
+    background: #e67e22;
+    color: white;
+}
+
+.btn-cancel {
+    background: #2d4a5f;
+    color: #ddd;
+}
+
+.maplibregl-popup-content {
+    background: #0f212e;
+    color: #f0f3f8;
+    border-radius: 20px;
+    border: 1px solid #3a6e8a;
+    box-shadow: 0 6px 14px black;
+    padding: 12px 16px;
+    min-width: 200px;
+}
+
+.maplibregl-popup-tip {
+    border-top-color: #0f212e;
+}
+
+.popup-title {
+    font-weight: bold;
+    font-size: 1.2rem;
+    margin-bottom: 6px;
+    color: #f5b041;
+}
+
+.popup-price {
+    font-size: 1rem;
+    margin: 6px 0;
+}
+
+.popup-desc {
+    font-size: 0.85rem;
+    opacity: 0.8;
+    margin-bottom: 8px;
+}
+
+.popup-votes {
+    display: flex;
+    gap: 12px;
+    margin-top: 10px;
+    font-size: 0.85rem;
+}
+
+.vote-btn {
+    background: #2d4a5f;
+    border: none;
+    color: white;
+    padding: 5px 12px;
+    border-radius: 40px;
+    cursor: pointer;
+    font-size: 0.75rem;
+    transition: 0.1s;
+}
+
+.vote-up { background: #2c6e2c; }
+.vote-down { background: #8b3c2c; }
+
+.delete-btn {
+    background: #a1220a;
+    margin-top: 8px;
+    width: 100%;
+    text-align: center;
+}
+
+.popup-meta {
+    font-size: 10px;
+    margin-top: 6px;
+    opacity: 0.5;
+}
+
+.status {
+    position: fixed;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 30;
+    background: rgba(15, 33, 46, 0.95);
+    border: 1px solid #2d5a6e;
+    color: #eef4ff;
+    padding: 10px 14px;
+    border-radius: 14px;
+    font-size: 0.85rem;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.35);
+    max-width: min(92vw, 520px);
+    display: none;
+}
+
+.status.error {
+    border-color: #8b3c2c;
+}
+
+.status.success {
+    border-color: #2c6e2c;
+}
