@@ -1,97 +1,12 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Выгодная карта | Где поесть дёшево</title>
-    <link href="https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.css" rel="stylesheet">
-    <link rel="stylesheet" href="./styles.css">
-    <script src="https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./config.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Выгодная карта | Где поесть дёшево</title>
 </head>
 <body>
-    <div id="map"></div>
-    <div class="map-fab-stack" aria-label="Действия на карте">
-        <button type="button" class="map-fab" id="openPriceFilter" title="Фильтр по цене" aria-label="Фильтр по цене">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/>
-                <line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/>
-                <line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/>
-                <line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>
-            </svg>
-        </button>
-        <button type="button" class="map-fab" id="openNameSearch" title="Поиск по названию" aria-label="Поиск по названию">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
-            </svg>
-        </button>
-        <div id="mapSearchChipWrap" class="map-search-chip-wrap" hidden>
-            <div class="map-search-chip" role="status">
-                <span id="mapSearchChipLabel" class="map-search-chip-label"></span>
-                <button type="button" id="mapSearchChipDismiss" class="map-search-chip-dismiss" aria-label="Показать все точки на карте">×</button>
-            </div>
-        </div>
-    </div>
-    <div id="status" class="status"></div>
-    <div class="controls">
-        <button type="button" class="btn btn-primary" id="addBtn">➕ Добавить заведение</button>
-    </div>
-
-    <div id="modalPrice" class="modal modal-glass" aria-hidden="true">
-        <div class="glass-modal-card" role="dialog" aria-labelledby="modalPriceTitle">
-            <div class="glass-modal-head">
-                <h3 id="modalPriceTitle">Фильтр цен</h3>
-                <button type="button" class="glass-modal-close" id="closePriceModal" aria-label="Закрыть">×</button>
-            </div>
-            <p class="glass-modal-label">Ценовой диапазон <span class="glass-range-value" id="priceRangeLabel">—</span></p>
-            <div class="dual-range">
-                <div class="dual-range-track" id="dualRangeTrack"></div>
-                <input type="range" class="dual-range-input dual-range-min" id="priceRangeMin" min="0" max="50000" step="500" value="0" aria-label="Минимальная цена">
-                <input type="range" class="dual-range-input dual-range-max" id="priceRangeMax" min="0" max="50000" step="500" value="50000" aria-label="Максимальная цена">
-            </div>
-            <div class="dual-range-scale">
-                <span>0</span>
-                <span>50 000</span>
-            </div>
-            <p class="glass-modal-hint">Учитываются числа из поля «цены» у точки (любая валюта). Без цифр — точка скрывается при сужении диапазона.</p>
-            <button type="button" class="glass-btn-apply" id="applyPriceFilter">Применить</button>
-        </div>
-    </div>
-
-    <div id="modalSearch" class="modal modal-glass" aria-hidden="true">
-        <div class="glass-modal-card glass-modal-card--search" role="dialog" aria-labelledby="modalSearchTitle">
-            <div class="glass-modal-head">
-                <h3 id="modalSearchTitle">Поиск заведений</h3>
-                <button type="button" class="glass-modal-close" id="closeSearchModal" aria-label="Закрыть">×</button>
-            </div>
-            <div class="glass-search-field">
-                <svg class="glass-search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                <input type="search" id="nameSearchInput" placeholder="Поиск по названию заведения" autocomplete="off" aria-label="Название заведения">
-            </div>
-            <p class="search-results-hint" id="searchResultsHint">Введите название — ниже появятся совпадения. Нажмите на строку, чтобы перейти к маркеру.</p>
-            <ul id="searchResultsList" class="search-results-list" role="listbox" aria-label="Совпадения по названию"></ul>
-            <div class="glass-modal-actions">
-                <button type="button" class="glass-btn-secondary" id="clearNameSearch">Очистить</button>
-                <button type="button" class="glass-btn-primary" id="applyNameSearch">Поиск</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="modal" class="modal">
-        <div class="modal-card">
-            <h3>🍜 Новое место</h3>
-            <p class="modal-hint">Кликните на карту, чтобы выбрать точку</p>
-            <input type="text" id="placeName" placeholder="Название заведения *" autocomplete="off">
-            <input type="text" id="priceInfo" placeholder="Цены / комплексы (напр. 5-7 BYN)">
-            <textarea id="description" placeholder="Что вкусного? (бургер, суп, бизнес-ланч...)"></textarea>
-            <div class="modal-buttons">
-                <button type="button" class="btn-cancel" id="cancelModal">Отмена</button>
-                <button type="button" class="btn-submit" id="submitPlace">Сохранить</button>
-            </div>
-        </div>
-    </div>
-
-    <script src="./app.js"></script>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>
