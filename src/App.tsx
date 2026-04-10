@@ -8,6 +8,8 @@ import {
   PRICE_SLIDER_MIN,
   PRICE_SLIDER_MAX,
   getVisiblePlaces,
+  isFullPriceRange,
+  placePassesCategoryFilter,
   placePassesPriceFilter,
   placePassesNameFilter,
 } from './lib/filters';
@@ -19,6 +21,9 @@ import StatusToast from './components/StatusToast';
 import AddPlaceModal from './components/AddPlaceModal';
 import PriceModal from './components/PriceModal';
 import SearchModal from './components/SearchModal';
+import PlaceSheet from './components/PlaceSheet';
+import RecentRegistrationsPanel from './components/RecentRegistrationsPanel';
+import MapSidebar from './components/MapSidebar';
 
 const MAP_STYLE = 'https://tiles.versatiles.org/assets/styles/colorful/style.json';
 const MAP_CENTER: [number, number] = [27.5618, 53.9023];
@@ -44,53 +49,21 @@ function escapeHtml(str: string): string {
   });
 }
 
-function generatePopupHTML(place: Place): string {
-  const cats = place.categories.length
-    ? `<div class="popup-cats">${place.categories.map((c) => `<span class="popup-cat">${escapeHtml(c)}</span>`).join('')}</div>`
-    : '';
-  const priceLabel = place.price ? `${place.price} BYN` : '';
-  const dishPrice = (place.dish || priceLabel)
-    ? `<div class="popup-dish-row">
-        ${place.dish ? `<span>🍽 ${escapeHtml(place.dish)}</span>` : ''}
-        ${priceLabel ? `<span class="popup-price-chip">💰 ${priceLabel}</span>` : ''}
-       </div>`
-    : '';
-  const hours = place.hours ? `<div class="popup-hours">🕐 ${escapeHtml(place.hours)}</div>` : '';
-  const address = place.address ? `<div class="popup-address">📍 ${escapeHtml(place.address)}</div>` : '';
-  const note = place.note ? `<div class="popup-note">📝 ${escapeHtml(place.note)}</div>` : '';
-
-  return `
-    <div class="popup-body">
-      <div class="popup-title">${escapeHtml(place.name)}</div>
-      ${cats}
-      ${dishPrice}
-      ${address}
-      ${hours}
-      ${note}
-      <div class="popup-votes">
-        <button class="vote-btn vote-up" data-id="${place.id}" data-vote="up">👍 ${place.votesUp}</button>
-        <button class="vote-btn vote-down" data-id="${place.id}" data-vote="down">👎 ${place.votesDown}</button>
-      </div>
-      <button class="vote-btn delete-btn" data-id="${place.id}">🗑️ Удалить</button>
-      <div class="popup-meta">добавлено ${new Date(place.createdAt).toLocaleDateString()}</div>
-    </div>
-  `;
-}
-
 export default function App() {
   const mapContainerRef = useRef<HTMLDivElement>(null!);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const currentMarkersRef = useRef<maplibregl.Marker[]>([]);
-  const markerByPlaceIdRef = useRef<Record<string, maplibregl.Marker>>({});
-  const currentPopupRef = useRef<maplibregl.Popup | null>(null);
   const addModeClickHandlerRef = useRef<((e: maplibregl.MapMouseEvent) => void) | null>(null);
 
   const [places, setPlaces] = useState<Place[]>([]);
   const [priceMin, setPriceMin] = useState(PRICE_SLIDER_MIN);
   const [priceMax, setPriceMax] = useState(PRICE_SLIDER_MAX);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [nameQuery, setNameQuery] = useState('');
   const [focusBypassId, setFocusBypassId] = useState<string | null>(null);
   const [searchChip, setSearchChip] = useState<SearchChip | null>(null);
+  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
+  const [recentPanelOpen, setRecentPanelOpen] = useState(true);
 
   const [isAddingMode, setIsAddingMode] = useState(false);
   const [pendingCoords, setPendingCoords] = useState<{ lng: number; lat: number } | null>(null);
@@ -105,6 +78,17 @@ export default function App() {
     setToast({ msg, type, key: Date.now() });
   }, []);
 
+  useEffect(() => {
+    const root = document.getElementById('root');
+    if (!root) return;
+
+    root.classList.add('is-map-mode');
+
+    return () => {
+      root.classList.remove('is-map-mode');
+    };
+  }, []);
+
   // ── Map init ───────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!mapContainerRef.current) return;
@@ -117,7 +101,6 @@ export default function App() {
       pitch: 0,
       attributionControl: false,
     });
-    map.addControl(new maplibregl.NavigationControl(), 'top-right');
     mapRef.current = map;
 
     map.on('load', async () => {
@@ -145,30 +128,33 @@ export default function App() {
   }, []);
 
   // ── Rebuild markers when visible places change ─────────────────────────────
-  const visiblePlaces = getVisiblePlaces(places, priceMin, priceMax, nameQuery, focusBypassId);
+  const visiblePlaces = getVisiblePlaces(
+    places,
+    priceMin,
+    priceMax,
+    selectedCategories,
+    nameQuery,
+    focusBypassId,
+  );
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.loaded()) return;
-    rebuildMarkers(map, visiblePlaces);
+    rebuildMarkers(map, visiblePlaces, selectedPlaceId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visiblePlaces]);
+  }, [visiblePlaces, selectedPlaceId]);
 
   function closeAllPopups() {
-    if (currentPopupRef.current) {
-      currentPopupRef.current.remove();
-      currentPopupRef.current = null;
-    }
+    setSelectedPlaceId(null);
   }
 
-  function rebuildMarkers(map: maplibregl.Map, visible: Place[]) {
+  function rebuildMarkers(map: maplibregl.Map, visible: Place[], activePlaceId: string | null) {
     currentMarkersRef.current.forEach((m) => m.remove());
     currentMarkersRef.current = [];
-    markerByPlaceIdRef.current = {};
 
     visible.forEach((place) => {
       const emoji = getFirstEmoji(place.categories);
-      const priceText = place.price ? `${place.price} BYN` : '';
+      const priceText = place.price ? place.price.toLocaleString('ru-RU') : '';
 
       const tooltipRows = [
         `<span class="mtt-name">${escapeHtml(place.name)}</span>`,
@@ -177,60 +163,38 @@ export default function App() {
       ].filter(Boolean).join('');
 
       const el = document.createElement('div');
-      el.className = 'map-marker-pill';
-      el.innerHTML =
-        `<span class="map-marker-emoji">${emoji}</span>` +
-        (priceText ? `<span class="map-marker-price">${priceText}</span>` : '') +
-        `<div class="mtt">${tooltipRows}</div>`;
+      el.className = `map-marker-pill${String(place.id) === String(activePlaceId) ? ' map-marker-pill--active' : ''}`;
+
+      const emojiEl = document.createElement('span');
+      emojiEl.className = 'map-marker-emoji';
+      emojiEl.textContent = emoji;
+
+      el.appendChild(emojiEl);
+
+      if (priceText) {
+        const priceEl = document.createElement('span');
+        priceEl.className = 'map-marker-price';
+        priceEl.textContent = priceText;
+        el.appendChild(priceEl);
+      }
+
+      const tooltipEl = document.createElement('div');
+      tooltipEl.className = 'mtt';
+      tooltipEl.innerHTML = tooltipRows;
+      el.appendChild(tooltipEl);
 
       const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
         .setLngLat([place.lng, place.lat])
         .addTo(map);
 
-      const popup = new maplibregl.Popup({ offset: 25, closeButton: true, closeOnClick: false })
-        .setHTML(generatePopupHTML(place));
-
       marker.getElement().addEventListener('click', (e) => {
         e.stopPropagation();
-        closeAllPopups();
-        popup.setHTML(generatePopupHTML(place));
-        currentPopupRef.current = popup;
-        marker.setPopup(popup).togglePopup();
+        setSelectedPlaceId(place.id);
       });
 
       currentMarkersRef.current.push(marker);
-      markerByPlaceIdRef.current[String(place.id)] = marker;
     });
   }
-
-  // ── Popup button delegation (vote / delete) ────────────────────────────────
-  useEffect(() => {
-    function handleBodyClick(e: MouseEvent) {
-      const target = e.target as HTMLElement;
-      if (!target.classList) return;
-
-      if (target.classList.contains('vote-btn') && !target.classList.contains('delete-btn')) {
-        const placeId = target.getAttribute('data-id');
-        const voteType = target.getAttribute('data-vote');
-        if (placeId && voteType) {
-          e.preventDefault();
-          e.stopPropagation();
-          handleVote(placeId, voteType === 'up');
-        }
-      }
-      if (target.classList.contains('delete-btn')) {
-        const placeId = target.getAttribute('data-id');
-        if (placeId) {
-          e.preventDefault();
-          e.stopPropagation();
-          handleDelete(placeId);
-        }
-      }
-    }
-    document.body.addEventListener('click', handleBodyClick);
-    return () => document.body.removeEventListener('click', handleBodyClick);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [places]);
 
   // ── Keyboard ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -238,6 +202,7 @@ export default function App() {
       if (e.key !== 'Escape') return;
       setModalPrice(false);
       setModalSearch(false);
+      closeAllPopups();
     }
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
@@ -256,7 +221,6 @@ export default function App() {
       }
       return updated;
     });
-    closeAllPopups();
   }
 
   // ── Delete ─────────────────────────────────────────────────────────────────
@@ -322,16 +286,27 @@ export default function App() {
   }
 
   // ── Price filter ──────────────────────────────────────────────────────────
-  function handleApplyPrice(min: number, max: number) {
+  function handleApplyPrice(min: number, max: number, categories: string[]) {
     setPriceMin(min);
     setPriceMax(max);
+    setSelectedCategories(categories);
     setFocusBypassId(null);
     setSearchChip(null);
     setModalPrice(false);
     closeAllPopups();
-    const visible = getVisiblePlaces(places, min, max, nameQuery, null);
+    const visible = getVisiblePlaces(places, min, max, categories, nameQuery, null);
     const hidden = places.length - visible.length;
     if (hidden > 0) showToast(`Показано ${visible.length} из ${places.length} точек`, 'info');
+  }
+
+  function handleClearPriceFilter() {
+    setPriceMin(PRICE_SLIDER_MIN);
+    setPriceMax(PRICE_SLIDER_MAX);
+    setSelectedCategories([]);
+    setFocusBypassId(null);
+    setSearchChip(null);
+    setModalPrice(false);
+    closeAllPopups();
   }
 
   // ── Name search ───────────────────────────────────────────────────────────
@@ -342,7 +317,10 @@ export default function App() {
     closeAllPopups();
     if (query.trim()) {
       const matches = places.filter(
-        (p) => placePassesPriceFilter(p, priceMin, priceMax) && placePassesNameFilter(p, query),
+        (p) =>
+          placePassesPriceFilter(p, priceMin, priceMax) &&
+          placePassesCategoryFilter(p, selectedCategories) &&
+          placePassesNameFilter(p, query),
       );
       if (matches.length === 1) {
         focusPlaceOnMap(matches[0]);
@@ -363,14 +341,15 @@ export default function App() {
     closeAllPopups();
   }
 
-  // ── Focus place (fly + popup) ─────────────────────────────────────────────
+  // ── Focus place (fly + sheet) ─────────────────────────────────────────────
   function focusPlaceOnMap(place: Place) {
     const map = mapRef.current;
     if (!map) return;
 
     const passesPrice = placePassesPriceFilter(place, priceMin, priceMax);
+    const passesCategory = placePassesCategoryFilter(place, selectedCategories);
     const passesName = placePassesNameFilter(place, nameQuery);
-    const bypass = passesPrice && passesName ? null : place.id;
+    const bypass = passesPrice && passesCategory && passesName ? null : place.id;
     setFocusBypassId(bypass);
     setSearchChip({ text: place.name || '—', placeId: place.id });
     setModalSearch(false);
@@ -380,19 +359,13 @@ export default function App() {
     map.flyTo({ center: [place.lng, place.lat], zoom: targetZoom, essential: true });
 
     let opened = false;
-    function tryOpenPopup() {
+    function openSheet() {
       if (opened) return;
       opened = true;
-      const marker = markerByPlaceIdRef.current[String(place.id)];
-      if (!marker) return;
-      closeAllPopups();
-      const popup = marker.getPopup();
-      if (!popup) return;
-      currentPopupRef.current = popup;
-      marker.togglePopup();
+      setSelectedPlaceId(place.id);
     }
-    map.once('moveend', tryOpenPopup);
-    setTimeout(tryOpenPopup, 900);
+    map.once('moveend', openSheet);
+    setTimeout(openSheet, 900);
   }
 
   function dismissChip() {
@@ -403,31 +376,84 @@ export default function App() {
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
+  const selectedPlace = places.find((place) => String(place.id) === String(selectedPlaceId)) ?? null;
+  const hasActiveMapFilter = !isFullPriceRange(priceMin, priceMax) || selectedCategories.length > 0;
+
   return (
-    <>
+    <div className="app-shell">
       <MapView containerRef={mapContainerRef} />
 
-      <FabStack
-        chip={searchChip}
-        onOpenPriceFilter={() => setModalPrice(true)}
-        onOpenNameSearch={() => setModalSearch(true)}
-        onDismissChip={dismissChip}
-      />
+      <div className="map-overlay-root">
+        <header className="map-app-header" role="banner">
+          <div className="map-app-header__brand">
+            <h1 className="map-app-header__title">Карта нищего</h1>
+            <p className="map-app-header__subtitle">
+              Подборка ресторанов с наилучшим соотношением цены и качества в эпоху высоких цен.
+            </p>
+          </div>
+        </header>
 
-      <div className="controls">
-        <button
-          type="button"
-          className={`btn${isAddingMode ? ' btn-primary' : ''}`}
-          onClick={enableAddMode}
-        >
-          {isAddingMode ? '❌ Отмена' : '➕ Добавить заведение'}
-        </button>
+        <div className="map-left-rail">
+          <MapSidebar places={visiblePlaces} onSelectPlace={focusPlaceOnMap} />
+        </div>
+
+        <div className="map-pc-right-rail">
+          <div className="map-right-controls">
+            <FabStack
+              chip={searchChip}
+              onOpenPriceFilter={() => setModalPrice(true)}
+              onOpenNameSearch={() => setModalSearch(true)}
+              onDismissChip={dismissChip}
+            />
+            {hasActiveMapFilter && (
+              <div className="map-filter-pill" role="status">
+                <span>
+                  ~{priceMax.toLocaleString('ru-RU')}
+                  {selectedCategories.length > 0 ? ` · ${selectedCategories.length} cat.` : ''}
+                </span>
+                <button type="button" onClick={handleClearPriceFilter} aria-label="Clear filters">
+                  ×
+                </button>
+              </div>
+            )}
+          </div>
+
+          {recentPanelOpen ? (
+            <RecentRegistrationsPanel
+              places={places}
+              visibleCount={visiblePlaces.length}
+              totalCount={places.length}
+              priceMin={priceMin}
+              priceMax={priceMax}
+              onSelectPlace={focusPlaceOnMap}
+              onClose={() => setRecentPanelOpen(false)}
+            />
+          ) : (
+            <button
+              type="button"
+              className="map-panel-reopen"
+              onClick={() => setRecentPanelOpen(true)}
+            >
+              Свежие
+            </button>
+          )}
+        </div>
+
+        <div className="controls">
+          <button
+            type="button"
+            className={`btn${isAddingMode ? ' btn-primary' : ''}`}
+            onClick={enableAddMode}
+          >
+            {isAddingMode ? 'Отменить выбор точки' : 'Добавить новое место'}
+          </button>
+        </div>
       </div>
 
       {isAddingMode && (
         <div className="map-hint-banner">
           <span className="map-hint-icon">📍</span>
-          <span>Кликните по карте, чтобы выбрать место заведения</span>
+          <span>Нажмите на карту, чтобы отметить новое заведение</span>
           <button type="button" className="map-hint-close" onClick={enableAddMode}>✕</button>
         </div>
       )}
@@ -445,6 +471,7 @@ export default function App() {
         open={modalPrice}
         priceMin={priceMin}
         priceMax={priceMax}
+        selectedCategories={selectedCategories}
         onClose={() => setModalPrice(false)}
         onApply={handleApplyPrice}
       />
@@ -464,6 +491,13 @@ export default function App() {
         onClose={() => { setModalAdd(false); setPendingCoords(null); }}
         onSubmit={handleAddSubmit}
       />
-    </>
+
+      <PlaceSheet
+        place={selectedPlace}
+        onClose={closeAllPopups}
+        onVote={handleVote}
+        onDelete={handleDelete}
+      />
+    </div>
   );
 }

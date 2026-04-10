@@ -1,24 +1,37 @@
 import { useState, useEffect, useCallback } from 'react';
 import { PRICE_SLIDER_MIN, PRICE_SLIDER_MAX, formatRuNum } from '../lib/filters';
+import { CATEGORIES } from '../lib/categories';
 
 interface Props {
   open: boolean;
   priceMin: number;
   priceMax: number;
+  selectedCategories: string[];
   onClose: () => void;
-  onApply: (min: number, max: number) => void;
+  onApply: (min: number, max: number, categories: string[]) => void;
 }
 
-export default function PriceModal({ open, priceMin, priceMax, onClose, onApply }: Props) {
+const MAX_SELECTED_CATEGORIES = 3;
+
+export default function PriceModal({
+  open,
+  priceMin,
+  priceMax,
+  selectedCategories,
+  onClose,
+  onApply,
+}: Props) {
   const [localMin, setLocalMin] = useState(priceMin);
   const [localMax, setLocalMax] = useState(priceMax);
+  const [localCategories, setLocalCategories] = useState<string[]>(selectedCategories);
 
   useEffect(() => {
     if (open) {
       setLocalMin(priceMin);
       setLocalMax(priceMax);
+      setLocalCategories(selectedCategories);
     }
-  }, [open, priceMin, priceMax]);
+  }, [open, priceMin, priceMax, selectedCategories]);
 
   const trackStyle = useCallback(() => {
     const span = PRICE_SLIDER_MAX - PRICE_SLIDER_MIN;
@@ -40,7 +53,19 @@ export default function PriceModal({ open, priceMin, priceMax, onClose, onApply 
   function handleApply() {
     const min = Math.min(localMin, localMax);
     const max = Math.max(localMin, localMax);
-    onApply(min, max);
+    onApply(min, max, localCategories);
+  }
+
+  function handleToggleCategory(categoryId: string) {
+    setLocalCategories((prev) => {
+      if (prev.includes(categoryId)) {
+        return prev.filter((id) => id !== categoryId);
+      }
+      if (prev.length >= MAX_SELECTED_CATEGORIES) {
+        return prev;
+      }
+      return [...prev, categoryId];
+    });
   }
 
   return (
@@ -87,6 +112,37 @@ export default function PriceModal({ open, priceMin, priceMax, onClose, onApply 
         <div className="dual-range-scale">
           <span>0</span>
           <span>50 000</span>
+        </div>
+        <div className="glass-category-section">
+          <p className="glass-modal-label">Категории</p>
+          <p className="glass-modal-hint glass-modal-hint--compact">
+            Можно выбрать до {MAX_SELECTED_CATEGORIES} категорий.
+          </p>
+          <div className="glass-category-grid">
+            <button
+              type="button"
+              className={`glass-category-chip glass-category-chip--all${localCategories.length === 0 ? ' is-active' : ''}`}
+              onClick={() => setLocalCategories([])}
+            >
+              Все категории
+            </button>
+            {CATEGORIES.map((category) => {
+              const isActive = localCategories.includes(category.id);
+              const isDisabled = !isActive && localCategories.length >= MAX_SELECTED_CATEGORIES;
+              return (
+                <button
+                  key={category.id}
+                  type="button"
+                  className={`glass-category-chip${isActive ? ' is-active' : ''}`}
+                  onClick={() => handleToggleCategory(category.id)}
+                  disabled={isDisabled}
+                >
+                  <span aria-hidden="true">{category.emoji}</span>
+                  <span>{category.label.replace(/^[^\s]+\s/, '')}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
         <p className="glass-modal-hint">
           Учитываются числа из поля «цены» у точки (любая валюта). Без цифр — точка скрывается при

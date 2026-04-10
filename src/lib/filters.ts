@@ -13,6 +13,11 @@ export function placePassesPriceFilter(place: Place, min: number, max: number): 
   return place.price >= min && place.price <= max;
 }
 
+export function placePassesCategoryFilter(place: Place, selectedCategoryIds: string[]): boolean {
+  if (selectedCategoryIds.length === 0) return true;
+  return place.categories.some((categoryId) => selectedCategoryIds.includes(categoryId));
+}
+
 export function placePassesNameFilter(place: Place, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
@@ -29,12 +34,17 @@ export function getVisiblePlaces(
   places: Place[],
   priceMin: number,
   priceMax: number,
+  selectedCategoryIds: string[],
   nameQuery: string,
   focusBypassId: string | null,
 ): Place[] {
   return places.filter((p) => {
     if (focusBypassId != null && String(p.id) === String(focusBypassId)) return true;
-    return placePassesPriceFilter(p, priceMin, priceMax) && placePassesNameFilter(p, nameQuery);
+    return (
+      placePassesPriceFilter(p, priceMin, priceMax) &&
+      placePassesCategoryFilter(p, selectedCategoryIds) &&
+      placePassesNameFilter(p, nameQuery)
+    );
   });
 }
 
