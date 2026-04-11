@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { PRICE_SLIDER_MIN, PRICE_SLIDER_MAX, formatRuNum } from '../lib/filters';
+import { PRICE_SLIDER_MIN, PRICE_SLIDER_MAX, PRICE_SLIDER_STEP, formatRuNum } from '../lib/filters';
 import { CATEGORIES } from '../lib/categories';
 
 interface Props {
@@ -93,7 +93,7 @@ export default function PriceModal({
             className="dual-range-input dual-range-min"
             min={PRICE_SLIDER_MIN}
             max={PRICE_SLIDER_MAX}
-            step={500}
+            step={PRICE_SLIDER_STEP}
             value={localMin}
             aria-label="Минимальная цена"
             onChange={(e) => handleMinChange(Number(e.target.value))}
@@ -103,15 +103,15 @@ export default function PriceModal({
             className="dual-range-input dual-range-max"
             min={PRICE_SLIDER_MIN}
             max={PRICE_SLIDER_MAX}
-            step={500}
+            step={PRICE_SLIDER_STEP}
             value={localMax}
             aria-label="Максимальная цена"
             onChange={(e) => handleMaxChange(Number(e.target.value))}
           />
         </div>
         <div className="dual-range-scale">
-          <span>0</span>
-          <span>50 000</span>
+          <span>{formatRuNum(PRICE_SLIDER_MIN)}</span>
+          <span>{formatRuNum(PRICE_SLIDER_MAX)}</span>
         </div>
         <div className="glass-category-section">
           <p className="glass-modal-label">Категории</p>

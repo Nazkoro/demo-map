@@ -1648,7 +1648,7 @@ body {
 }
 
 .maplibregl-canvas {
-    filter: saturate(0.92) contrast(0.97) brightness(1.02);
+    filter: none;
 }
 
 .maplibregl-ctrl-top-right {
@@ -2072,10 +2072,13 @@ body {
 }
 
 .map-hint-banner {
-    top: auto;
-    bottom: 88px;
-    left: 18px;
-    transform: none;
+    top: 18px;
+    bottom: auto;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    max-width: calc(100vw - 36px);
+    white-space: normal;
     border-radius: 20px;
     background: rgba(255, 255, 255, 0.92);
     border: 1px solid rgba(255, 255, 255, 0.8);
@@ -2354,9 +2357,12 @@ body {
     }
 
     .map-hint-banner {
-        left: 12px;
-        right: 12px;
-        bottom: 76px;
+        top: 14px;
+        bottom: auto;
+        left: 50%;
+        right: auto;
+        transform: translateX(-50%);
+        max-width: calc(100vw - 24px);
         white-space: normal;
     }
 
@@ -2400,7 +2406,7 @@ body {
 }
 
 .maplibregl-canvas {
-    filter: saturate(0.84) contrast(0.96) brightness(1.03);
+    filter: none;
 }
 
 .map-overlay-root {
@@ -2636,13 +2642,18 @@ body {
 }
 
 .map-hint-banner {
-    left: 14px;
-    bottom: 68px;
+    top: 14px;
+    bottom: auto;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    max-width: calc(100vw - 28px);
     min-height: 42px;
     padding: 0 14px;
     border-radius: 999px;
     align-items: center;
     font-size: 0.8rem;
+    white-space: normal;
 }
 
 .maplibregl-ctrl-top-right {
@@ -2762,10 +2773,14 @@ body {
     }
 
     .map-hint-banner {
-        left: 10px;
-        right: 10px;
-        bottom: 60px;
+        top: 12px;
+        bottom: auto;
+        left: 50%;
+        right: auto;
+        transform: translateX(-50%);
+        max-width: calc(100vw - 20px);
         border-radius: 18px;
+        white-space: normal;
     }
 
     .place-sheet-layer {
@@ -2934,6 +2949,33 @@ body {
     align-items: flex-end;
     gap: 8px;
     pointer-events: auto;
+}
+
+.map-zoom-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 32px;
+    padding: 0 12px;
+    border-radius: 999px;
+    background: rgba(49, 55, 66, 0.94);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.16);
+}
+
+.map-zoom-pill__label {
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.62);
+}
+
+.map-zoom-pill__value {
+    font-size: 0.8rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
 }
 
 .map-overlay-sheet,

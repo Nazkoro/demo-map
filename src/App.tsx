@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import maplibregl from 'maplibre-gl';
 
 import type { Place, PlaceFormData } from './types';
@@ -28,6 +28,11 @@ import MapSidebar from './components/MapSidebar';
 const MAP_STYLE = 'https://tiles.versatiles.org/assets/styles/colorful/style.json';
 const MAP_CENTER: [number, number] = [27.5618, 53.9023];
 const MAP_ZOOM = 12;
+const CLUSTER_SOURCE_ID = 'places-clusters';
+const CLUSTER_CIRCLES_LAYER_ID = 'places-cluster-circles';
+const CLUSTER_COUNT_LAYER_ID = 'places-cluster-count';
+const UNCLUSTERED_POINTS_LAYER_ID = 'places-unclustered-points';
+const CLUSTER_MARKER_ZOOM = 10;
 
 interface Toast {
   msg: string;
@@ -47,6 +52,27 @@ function escapeHtml(str: string): string {
     if (m === '>') return '&gt;';
     return m;
   });
+}
+
+function buildClusterGeoJson(places: Place[]) {
+  return {
+    type: 'FeatureCollection' as const,
+    features: places.map((place) => ({
+      type: 'Feature' as const,
+      properties: {
+        id: place.id,
+      },
+      geometry: {
+        type: 'Point' as const,
+        coordinates: [place.lng, place.lat] as [number, number],
+      },
+    })),
+  };
+}
+
+function updateClusterSource(map: maplibregl.Map, places: Place[]) {
+  const source = map.getSource(CLUSTER_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+  source?.setData(buildClusterGeoJson(places));
 }
 
 export default function App() {
@@ -73,6 +99,7 @@ export default function App() {
   const [modalAdd, setModalAdd] = useState(false);
 
   const [toast, setToast] = useState<Toast | null>(null);
+  const [currentZoom, setCurrentZoom] = useState(MAP_ZOOM);
 
   const showToast = useCallback((msg: string, type: Toast['type'] = 'info') => {
     setToast({ msg, type, key: Date.now() });
@@ -98,15 +125,109 @@ export default function App() {
       style: MAP_STYLE,
       center: MAP_CENTER,
       zoom: MAP_ZOOM,
+      minZoom: 5,
+      maxZoom: 18,
       pitch: 0,
       attributionControl: false,
     });
     mapRef.current = map;
 
+    const syncZoom = () => {
+      setCurrentZoom(map.getZoom());
+    };
+
+    const zoomIntoCluster = (e: maplibregl.MapLayerMouseEvent) => {
+      const feature = e.features?.[0];
+      const geometry = feature?.geometry;
+      if (!geometry || geometry.type !== 'Point') return;
+
+      const [lng, lat] = geometry.coordinates as [number, number];
+      const nextZoom = Math.min(Math.max(map.getZoom() + 1, CLUSTER_MARKER_ZOOM), 18);
+      map.easeTo({ center: [lng, lat], zoom: nextZoom, duration: 250 });
+    };
+
+    const setClusterCursor = () => {
+      map.getCanvas().style.cursor = 'pointer';
+    };
+
+    const resetClusterCursor = () => {
+      if (!addModeClickHandlerRef.current) map.getCanvas().style.cursor = '';
+    };
+
     map.on('load', async () => {
+      map.setProjection({ type: 'mercator' });
+      map.addSource(CLUSTER_SOURCE_ID, {
+        type: 'geojson',
+        data: buildClusterGeoJson([]),
+        cluster: true,
+        clusterMaxZoom: CLUSTER_MARKER_ZOOM - 1,
+        clusterRadius: 56,
+      });
+
+      map.addLayer({
+        id: CLUSTER_CIRCLES_LAYER_ID,
+        type: 'circle',
+        source: CLUSTER_SOURCE_ID,
+        maxzoom: CLUSTER_MARKER_ZOOM,
+        filter: ['has', 'point_count'],
+        paint: {
+          'circle-color': '#ffffff',
+          'circle-stroke-color': 'rgba(31, 36, 48, 0.12)',
+          'circle-stroke-width': 1.5,
+          'circle-radius': [
+            'step',
+            ['get', 'point_count'],
+            18,
+            5,
+            20,
+            10,
+            24,
+            20,
+            28,
+          ],
+          'circle-blur': 0,
+        },
+      });
+
+      map.addLayer({
+        id: CLUSTER_COUNT_LAYER_ID,
+        type: 'symbol',
+        source: CLUSTER_SOURCE_ID,
+        maxzoom: CLUSTER_MARKER_ZOOM,
+        filter: ['has', 'point_count'],
+        layout: {
+          'text-field': ['get', 'point_count_abbreviated'],
+          'text-font': ['Open Sans Bold'],
+          'text-size': 12,
+        },
+        paint: {
+          'text-color': '#1f2430',
+        },
+      });
+
+      map.addLayer({
+        id: UNCLUSTERED_POINTS_LAYER_ID,
+        type: 'circle',
+        source: CLUSTER_SOURCE_ID,
+        maxzoom: CLUSTER_MARKER_ZOOM,
+        filter: ['!', ['has', 'point_count']],
+        paint: {
+          'circle-color': '#1f2430',
+          'circle-radius': 5,
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 2,
+        },
+      });
+
+      map.on('click', CLUSTER_CIRCLES_LAYER_ID, zoomIntoCluster);
+      map.on('mouseenter', CLUSTER_CIRCLES_LAYER_ID, setClusterCursor);
+      map.on('mouseleave', CLUSTER_CIRCLES_LAYER_ID, resetClusterCursor);
+
+      syncZoom();
       if (!supabase) showToast('Supabase не настроен', 'error');
       try {
         const data = await loadPlaces();
+        updateClusterSource(map, data);
         setPlaces(data);
         if (data.length === 0) showToast('Пока нет точек. Добавьте первое заведение', 'info');
       } catch (e: unknown) {
@@ -119,8 +240,13 @@ export default function App() {
       closeAllPopups();
       setFocusBypassId(null);
     });
+    map.on('zoom', syncZoom);
 
     return () => {
+      map.off('click', CLUSTER_CIRCLES_LAYER_ID, zoomIntoCluster);
+      map.off('mouseenter', CLUSTER_CIRCLES_LAYER_ID, setClusterCursor);
+      map.off('mouseleave', CLUSTER_CIRCLES_LAYER_ID, resetClusterCursor);
+      map.off('zoom', syncZoom);
       map.remove();
       mapRef.current = null;
     };
@@ -128,21 +254,31 @@ export default function App() {
   }, []);
 
   // ── Rebuild markers when visible places change ─────────────────────────────
-  const visiblePlaces = getVisiblePlaces(
-    places,
-    priceMin,
-    priceMax,
-    selectedCategories,
-    nameQuery,
-    focusBypassId,
+  const visiblePlaces = useMemo(
+    () =>
+      getVisiblePlaces(
+        places,
+        priceMin,
+        priceMax,
+        selectedCategories,
+        nameQuery,
+        focusBypassId,
+      ),
+    [places, priceMin, priceMax, selectedCategories, nameQuery, focusBypassId],
   );
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.loaded()) return;
+    updateClusterSource(map, visiblePlaces);
+  }, [visiblePlaces]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.loaded()) return;
     rebuildMarkers(map, visiblePlaces, selectedPlaceId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visiblePlaces, selectedPlaceId]);
+  }, [visiblePlaces, selectedPlaceId, currentZoom]);
 
   function closeAllPopups() {
     setSelectedPlaceId(null);
@@ -151,6 +287,8 @@ export default function App() {
   function rebuildMarkers(map: maplibregl.Map, visible: Place[], activePlaceId: string | null) {
     currentMarkersRef.current.forEach((m) => m.remove());
     currentMarkersRef.current = [];
+
+    if (map.getZoom() < CLUSTER_MARKER_ZOOM) return;
 
     visible.forEach((place) => {
       const emoji = getFirstEmoji(place.categories);
@@ -183,7 +321,11 @@ export default function App() {
       tooltipEl.innerHTML = tooltipRows;
       el.appendChild(tooltipEl);
 
-      const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
+      const marker = new maplibregl.Marker({
+        element: el,
+        anchor: 'bottom',
+        subpixelPositioning: true,
+      })
         .setLngLat([place.lng, place.lat])
         .addTo(map);
 
@@ -399,6 +541,10 @@ export default function App() {
 
         <div className="map-pc-right-rail">
           <div className="map-right-controls">
+            <div className="map-zoom-pill" role="status" aria-label={`Текущий масштаб: ${currentZoom.toFixed(1)}`}>
+              <span className="map-zoom-pill__label">Zoom</span>
+              <span className="map-zoom-pill__value">{currentZoom.toFixed(1)}</span>
+            </div>
             <FabStack
               chip={searchChip}
               onOpenPriceFilter={() => setModalPrice(true)}

@@ -1,7 +1,8 @@
 import type { Place } from '../types';
 
 export const PRICE_SLIDER_MIN = 0;
-export const PRICE_SLIDER_MAX = 50000;
+export const PRICE_SLIDER_MAX = 20;
+export const PRICE_SLIDER_STEP = 1;
 
 export function isFullPriceRange(min: number, max: number): boolean {
   return min <= PRICE_SLIDER_MIN && max >= PRICE_SLIDER_MAX;
