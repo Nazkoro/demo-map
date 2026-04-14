@@ -3,10 +3,5 @@ interface Props {
 }
 
 export default function MapView({ containerRef }: Props) {
-  return (
-    <div
-      ref={containerRef}
-      className="map-canvas"
-    />
-  );
+  return <div ref={containerRef} className="map-canvas" />;
 }

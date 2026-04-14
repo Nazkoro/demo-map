@@ -3,7 +3,7 @@ export interface Place {
   lng: number;
   lat: number;
   name: string;
-  price: number;        // BYN, 0 = не указана
+  price: number; // BYN, 0 = не указана
   categories: string[];
   dish: string;
   hours: string;
@@ -16,7 +16,7 @@ export interface Place {
 
 export interface PlaceFormData {
   name: string;
-  price: number;        // BYN, 0 = не указана
+  price: number; // BYN, 0 = не указана
   categories: string[];
   dish: string;
   hours: string;

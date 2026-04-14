@@ -28,12 +28,13 @@ function generateId(): string {
 }
 
 export async function loadPlaces(): Promise<Place[]> {
-  if (!supabase) return [];
-  const { data, error } = await supabase
-    .from(TABLE)
-    .select('*')
-    .order('created_at', { ascending: false });
-  if (error) throw error;
+  if (!supabase) {
+    return [];
+  }
+  const { data, error } = await supabase.from(TABLE).select('*').order('created_at', { ascending: false });
+  if (error) {
+    throw error;
+  }
   return (data ?? []).map(mapDbRowToPlace);
 }
 
@@ -72,21 +73,31 @@ export async function insertPlace(
     .insert({ ...base, created_at: new Date().toISOString() })
     .select()
     .single();
-  if (error) throw error;
+  if (error) {
+    throw error;
+  }
   return { place: mapDbRowToPlace(data), local: false };
 }
 
 export async function updateVotes(place: Place): Promise<void> {
-  if (!supabase) return;
+  if (!supabase) {
+    return;
+  }
   const { error } = await supabase
     .from(TABLE)
     .update({ votes_up: place.votesUp, votes_down: place.votesDown })
     .eq('id', place.id);
-  if (error) throw error;
+  if (error) {
+    throw error;
+  }
 }
 
 export async function removePlace(id: string): Promise<void> {
-  if (!supabase) return;
+  if (!supabase) {
+    return;
+  }
   const { error } = await supabase.from(TABLE).delete().eq('id', id);
-  if (error) throw error;
+  if (error) {
+    throw error;
+  }
 }

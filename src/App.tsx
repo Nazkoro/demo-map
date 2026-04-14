@@ -47,9 +47,15 @@ interface SearchChip {
 
 function escapeHtml(str: string): string {
   return str.replace(/[&<>]/g, (m) => {
-    if (m === '&') return '&amp;';
-    if (m === '<') return '&lt;';
-    if (m === '>') return '&gt;';
+    if (m === '&') {
+      return '&amp;';
+    }
+    if (m === '<') {
+      return '&lt;';
+    }
+    if (m === '>') {
+      return '&gt;';
+    }
     return m;
   });
 }
@@ -107,7 +113,9 @@ export default function App() {
 
   useEffect(() => {
     const root = document.getElementById('root');
-    if (!root) return;
+    if (!root) {
+      return;
+    }
 
     root.classList.add('is-map-mode');
 
@@ -118,7 +126,9 @@ export default function App() {
 
   // ── Map init ───────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!mapContainerRef.current) return;
+    if (!mapContainerRef.current) {
+      return;
+    }
 
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
@@ -139,7 +149,9 @@ export default function App() {
     const zoomIntoCluster = (e: maplibregl.MapLayerMouseEvent) => {
       const feature = e.features?.[0];
       const geometry = feature?.geometry;
-      if (!geometry || geometry.type !== 'Point') return;
+      if (!geometry || geometry.type !== 'Point') {
+        return;
+      }
 
       const [lng, lat] = geometry.coordinates as [number, number];
       const nextZoom = Math.min(Math.max(map.getZoom() + 1, CLUSTER_MARKER_ZOOM), 18);
@@ -151,7 +163,9 @@ export default function App() {
     };
 
     const resetClusterCursor = () => {
-      if (!addModeClickHandlerRef.current) map.getCanvas().style.cursor = '';
+      if (!addModeClickHandlerRef.current) {
+        map.getCanvas().style.cursor = '';
+      }
     };
 
     map.on('load', async () => {
@@ -174,17 +188,7 @@ export default function App() {
           'circle-color': '#ffffff',
           'circle-stroke-color': 'rgba(31, 36, 48, 0.12)',
           'circle-stroke-width': 1.5,
-          'circle-radius': [
-            'step',
-            ['get', 'point_count'],
-            18,
-            5,
-            20,
-            10,
-            24,
-            20,
-            28,
-          ],
+          'circle-radius': ['step', ['get', 'point_count'], 18, 5, 20, 10, 24, 20, 28],
           'circle-blur': 0,
         },
       });
@@ -224,19 +228,25 @@ export default function App() {
       map.on('mouseleave', CLUSTER_CIRCLES_LAYER_ID, resetClusterCursor);
 
       syncZoom();
-      if (!supabase) showToast('Supabase не настроен', 'error');
+      if (!supabase) {
+        showToast('Supabase не настроен', 'error');
+      }
       try {
         const data = await loadPlaces();
         updateClusterSource(map, data);
         setPlaces(data);
-        if (data.length === 0) showToast('Пока нет точек. Добавьте первое заведение', 'info');
+        if (data.length === 0) {
+          showToast('Пока нет точек. Добавьте первое заведение', 'info');
+        }
       } catch (e: unknown) {
         showToast('Не удалось загрузить данные: ' + (e instanceof Error ? e.message : String(e)), 'error');
       }
     });
 
     map.on('click', () => {
-      if (addModeClickHandlerRef.current) return; // handled by add-mode handler
+      if (addModeClickHandlerRef.current) {
+        return;
+      } // handled by add-mode handler
       closeAllPopups();
       setFocusBypassId(null);
     });
@@ -255,29 +265,24 @@ export default function App() {
 
   // ── Rebuild markers when visible places change ─────────────────────────────
   const visiblePlaces = useMemo(
-    () =>
-      getVisiblePlaces(
-        places,
-        priceMin,
-        priceMax,
-        selectedCategories,
-        nameQuery,
-        focusBypassId,
-      ),
+    () => getVisiblePlaces(places, priceMin, priceMax, selectedCategories, nameQuery, focusBypassId),
     [places, priceMin, priceMax, selectedCategories, nameQuery, focusBypassId],
   );
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.loaded()) return;
+    if (!map || !map.loaded()) {
+      return;
+    }
     updateClusterSource(map, visiblePlaces);
   }, [visiblePlaces]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.loaded()) return;
+    if (!map || !map.loaded()) {
+      return;
+    }
     rebuildMarkers(map, visiblePlaces, selectedPlaceId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visiblePlaces, selectedPlaceId, currentZoom]);
 
   function closeAllPopups() {
@@ -288,7 +293,9 @@ export default function App() {
     currentMarkersRef.current.forEach((m) => m.remove());
     currentMarkersRef.current = [];
 
-    if (map.getZoom() < CLUSTER_MARKER_ZOOM) return;
+    if (map.getZoom() < CLUSTER_MARKER_ZOOM) {
+      return;
+    }
 
     visible.forEach((place) => {
       const emoji = getFirstEmoji(place.categories);
@@ -297,8 +304,10 @@ export default function App() {
       const tooltipRows = [
         `<span class="mtt-name">${escapeHtml(place.name)}</span>`,
         place.address ? `<span class="mtt-row">${escapeHtml(place.address)}</span>` : '',
-        place.hours   ? `<span class="mtt-row">${escapeHtml(place.hours)}</span>`   : '',
-      ].filter(Boolean).join('');
+        place.hours ? `<span class="mtt-row">${escapeHtml(place.hours)}</span>` : '',
+      ]
+        .filter(Boolean)
+        .join('');
 
       const el = document.createElement('div');
       el.className = `map-marker-pill${String(place.id) === String(activePlaceId) ? ' map-marker-pill--active' : ''}`;
@@ -341,7 +350,9 @@ export default function App() {
   // ── Keyboard ───────────────────────────────────────────────────────────────
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key !== 'Escape') return;
+      if (e.key !== 'Escape') {
+        return;
+      }
       setModalPrice(false);
       setModalSearch(false);
       closeAllPopups();
@@ -354,7 +365,9 @@ export default function App() {
   function handleVote(placeId: string, isUp: boolean) {
     setPlaces((prev) => {
       const updated = prev.map((p) => {
-        if (String(p.id) !== String(placeId)) return p;
+        if (String(p.id) !== String(placeId)) {
+          return p;
+        }
         return { ...p, votesUp: isUp ? p.votesUp + 1 : p.votesUp, votesDown: !isUp ? p.votesDown + 1 : p.votesDown };
       });
       const place = updated.find((p) => String(p.id) === String(placeId));
@@ -367,7 +380,9 @@ export default function App() {
 
   // ── Delete ─────────────────────────────────────────────────────────────────
   async function handleDelete(placeId: string) {
-    if (!confirm('Удалить эту точку?')) return;
+    if (!confirm('Удалить эту точку?')) {
+      return;
+    }
     try {
       await removePlace(placeId);
     } catch {
@@ -375,8 +390,12 @@ export default function App() {
       return;
     }
     setPlaces((prev) => prev.filter((p) => String(p.id) !== String(placeId)));
-    if (searchChip?.placeId === placeId) setSearchChip(null);
-    if (focusBypassId === placeId) setFocusBypassId(null);
+    if (searchChip?.placeId === placeId) {
+      setSearchChip(null);
+    }
+    if (focusBypassId === placeId) {
+      setFocusBypassId(null);
+    }
     closeAllPopups();
     showToast('Точка удалена', 'success');
   }
@@ -384,7 +403,9 @@ export default function App() {
   // ── Add mode ───────────────────────────────────────────────────────────────
   function enableAddMode() {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map) {
+      return;
+    }
 
     if (isAddingMode) {
       // cancel
@@ -414,7 +435,9 @@ export default function App() {
   }
 
   async function handleAddSubmit(form: PlaceFormData) {
-    if (!pendingCoords) return;
+    if (!pendingCoords) {
+      return;
+    }
     try {
       const { place, local } = await insertPlace(pendingCoords.lng, pendingCoords.lat, form);
       setPlaces((prev) => [place, ...prev]);
@@ -438,7 +461,9 @@ export default function App() {
     closeAllPopups();
     const visible = getVisiblePlaces(places, min, max, categories, nameQuery, null);
     const hidden = places.length - visible.length;
-    if (hidden > 0) showToast(`Показано ${visible.length} из ${places.length} точек`, 'info');
+    if (hidden > 0) {
+      showToast(`Показано ${visible.length} из ${places.length} точек`, 'info');
+    }
   }
 
   function handleClearPriceFilter() {
@@ -469,7 +494,10 @@ export default function App() {
         return;
       }
       setSearchChip(null);
-      showToast(matches.length ? `Найдено: ${matches.length}` : 'Ничего не найдено', matches.length ? 'success' : 'info');
+      showToast(
+        matches.length ? `Найдено: ${matches.length}` : 'Ничего не найдено',
+        matches.length ? 'success' : 'info',
+      );
     } else {
       setSearchChip(null);
     }
@@ -486,7 +514,9 @@ export default function App() {
   // ── Focus place (fly + sheet) ─────────────────────────────────────────────
   function focusPlaceOnMap(place: Place) {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map) {
+      return;
+    }
 
     const passesPrice = placePassesPriceFilter(place, priceMin, priceMax);
     const passesCategory = placePassesCategoryFilter(place, selectedCategories);
@@ -502,7 +532,9 @@ export default function App() {
 
     let opened = false;
     function openSheet() {
-      if (opened) return;
+      if (opened) {
+        return;
+      }
       opened = true;
       setSelectedPlaceId(place.id);
     }
@@ -575,22 +607,14 @@ export default function App() {
               onClose={() => setRecentPanelOpen(false)}
             />
           ) : (
-            <button
-              type="button"
-              className="map-panel-reopen"
-              onClick={() => setRecentPanelOpen(true)}
-            >
+            <button type="button" className="map-panel-reopen" onClick={() => setRecentPanelOpen(true)}>
               Свежие
             </button>
           )}
         </div>
 
         <div className="controls">
-          <button
-            type="button"
-            className={`btn${isAddingMode ? ' btn-primary' : ''}`}
-            onClick={enableAddMode}
-          >
+          <button type="button" className={`btn${isAddingMode ? ' btn-primary' : ''}`} onClick={enableAddMode}>
             {isAddingMode ? 'Отменить выбор точки' : 'Добавить новое место'}
           </button>
         </div>
@@ -600,18 +624,13 @@ export default function App() {
         <div className="map-hint-banner">
           <span className="map-hint-icon">📍</span>
           <span>Нажмите на карту, чтобы отметить новое заведение</span>
-          <button type="button" className="map-hint-close" onClick={enableAddMode}>✕</button>
+          <button type="button" className="map-hint-close" onClick={enableAddMode}>
+            ✕
+          </button>
         </div>
       )}
 
-      {toast && (
-        <StatusToast
-          key={toast.key}
-          message={toast.msg}
-          type={toast.type}
-          onDone={() => setToast(null)}
-        />
-      )}
+      {toast && <StatusToast key={toast.key} message={toast.msg} type={toast.type} onDone={() => setToast(null)} />}
 
       <PriceModal
         open={modalPrice}
@@ -634,16 +653,14 @@ export default function App() {
 
       <AddPlaceModal
         open={modalAdd}
-        onClose={() => { setModalAdd(false); setPendingCoords(null); }}
+        onClose={() => {
+          setModalAdd(false);
+          setPendingCoords(null);
+        }}
         onSubmit={handleAddSubmit}
       />
 
-      <PlaceSheet
-        place={selectedPlace}
-        onClose={closeAllPopups}
-        onVote={handleVote}
-        onDelete={handleDelete}
-      />
+      <PlaceSheet place={selectedPlace} onClose={closeAllPopups} onVote={handleVote} onDelete={handleDelete} />
     </div>
   );
 }

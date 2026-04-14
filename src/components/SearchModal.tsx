@@ -11,15 +11,7 @@ interface Props {
   onClear: () => void;
 }
 
-export default function SearchModal({
-  open,
-  initialQuery,
-  places,
-  onClose,
-  onApply,
-  onSelectPlace,
-  onClear,
-}: Props) {
+export default function SearchModal({ open, initialQuery, places, onClose, onApply, onSelectPlace, onClear }: Props) {
   const [query, setQuery] = useState(initialQuery);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -30,12 +22,12 @@ export default function SearchModal({
     }
   }, [open, initialQuery]);
 
-  if (!open) return null;
+  if (!open) {
+    return null;
+  }
 
   const q = query.trim().toLowerCase();
-  const matches = q
-    ? places.filter((p) => (p.name || '').toLowerCase().includes(q))
-    : [];
+  const matches = q ? places.filter((p) => (p.name || '').toLowerCase().includes(q)) : [];
 
   const hint = !q
     ? 'Введите название — ниже появятся совпадения. Нажмите на строку, чтобы перейти к маркеру.'
@@ -52,10 +44,7 @@ export default function SearchModal({
   }
 
   return (
-    <div
-      className="modal modal-glass active"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
+    <div className="modal modal-glass active" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="glass-modal-card glass-modal-card--search" role="dialog" aria-labelledby="modalSearchTitle">
         <div className="glass-modal-head">
           <h3 id="modalSearchTitle">Поиск заведений</h3>
@@ -64,7 +53,15 @@ export default function SearchModal({
           </button>
         </div>
         <div className="glass-search-field">
-          <svg className="glass-search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg
+            className="glass-search-icon"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.3-4.3" />
           </svg>
@@ -84,12 +81,7 @@ export default function SearchModal({
           <ul className="search-results-list" role="listbox" aria-label="Совпадения по названию">
             {matches.map((place) => (
               <li key={place.id}>
-                <button
-                  type="button"
-                  className="search-result-item"
-                  role="option"
-                  onClick={() => onSelectPlace(place)}
-                >
+                <button type="button" className="search-result-item" role="option" onClick={() => onSelectPlace(place)}>
                   <span className="search-result-name">{place.name || '—'}</span>
                   <span className="search-result-price">{place.price || '—'}</span>
                 </button>

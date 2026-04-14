@@ -9,25 +9,28 @@ export function isFullPriceRange(min: number, max: number): boolean {
 }
 
 export function placePassesPriceFilter(place: Place, min: number, max: number): boolean {
-  if (isFullPriceRange(min, max)) return true;
-  if (!place.price) return false;
+  if (isFullPriceRange(min, max)) {
+    return true;
+  }
+  if (!place.price) {
+    return false;
+  }
   return place.price >= min && place.price <= max;
 }
 
 export function placePassesCategoryFilter(place: Place, selectedCategoryIds: string[]): boolean {
-  if (selectedCategoryIds.length === 0) return true;
+  if (selectedCategoryIds.length === 0) {
+    return true;
+  }
   return place.categories.some((categoryId) => selectedCategoryIds.includes(categoryId));
 }
 
 export function placePassesNameFilter(place: Place, query: string): boolean {
   const q = query.trim().toLowerCase();
-  if (!q) return true;
-  const haystack = [
-    place.name,
-    place.dish,
-    place.note,
-    ...(place.categories ?? []),
-  ].join(' ').toLowerCase();
+  if (!q) {
+    return true;
+  }
+  const haystack = [place.name, place.dish, place.note, ...(place.categories ?? [])].join(' ').toLowerCase();
   return haystack.includes(q);
 }
 
@@ -40,7 +43,9 @@ export function getVisiblePlaces(
   focusBypassId: string | null,
 ): Place[] {
   return places.filter((p) => {
-    if (focusBypassId != null && String(p.id) === String(focusBypassId)) return true;
+    if (focusBypassId != null && String(p.id) === String(focusBypassId)) {
+      return true;
+    }
     return (
       placePassesPriceFilter(p, priceMin, priceMax) &&
       placePassesCategoryFilter(p, selectedCategoryIds) &&

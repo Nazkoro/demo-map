@@ -11,13 +11,13 @@ interface Props {
 }
 
 export default function AddPlaceModal({ open, onClose, onSubmit }: Props) {
-  const [name, setName]         = useState('');
-  const [address, setAddress]   = useState('');
-  const [cats, setCats]         = useState<string[]>([]);
-  const [dish, setDish]         = useState('');
-  const [priceRaw, setPriceRaw] = useState('');   // строка в инпуте
-  const [hours, setHours]       = useState('');
-  const [note, setNote]         = useState('');
+  const [name, setName] = useState('');
+  const [address, setAddress] = useState('');
+  const [cats, setCats] = useState<string[]>([]);
+  const [dish, setDish] = useState('');
+  const [priceRaw, setPriceRaw] = useState(''); // строка в инпуте
+  const [hours, setHours] = useState('');
+  const [note, setNote] = useState('');
 
   useEffect(() => {
     if (open) {
@@ -31,12 +31,18 @@ export default function AddPlaceModal({ open, onClose, onSubmit }: Props) {
     }
   }, [open]);
 
-  if (!open) return null;
+  if (!open) {
+    return null;
+  }
 
   function toggleCat(id: string) {
     setCats((prev) => {
-      if (prev.includes(id)) return prev.filter((c) => c !== id);
-      if (prev.length >= MAX_CATS) return prev;
+      if (prev.includes(id)) {
+        return prev.filter((c) => c !== id);
+      }
+      if (prev.length >= MAX_CATS) {
+        return prev;
+      }
       return [...prev, id];
     });
   }
@@ -58,7 +64,6 @@ export default function AddPlaceModal({ open, onClose, onSubmit }: Props) {
   return (
     <div className="am-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="am-card">
-
         {/* Header */}
         <div className="am-header">
           <h2 className="am-title">Добавить заведение</h2>
@@ -69,7 +74,6 @@ export default function AddPlaceModal({ open, onClose, onSubmit }: Props) {
 
         {/* Scrollable form */}
         <form className="am-body" onSubmit={handleSubmit}>
-
           {/* Restaurant name */}
           <div className="am-field">
             <label className="am-label">Название заведения *</label>
@@ -98,9 +102,7 @@ export default function AddPlaceModal({ open, onClose, onSubmit }: Props) {
 
           {/* Categories */}
           <div className="am-cats-box">
-            <label className="am-label am-label--primary">
-              Категории (мин. 1, макс. {MAX_CATS})
-            </label>
+            <label className="am-label am-label--primary">Категории (мин. 1, макс. {MAX_CATS})</label>
             <div className="am-cats-grid">
               {CATEGORIES.map((cat) => {
                 const checked = cats.includes(cat.id);
@@ -110,18 +112,15 @@ export default function AddPlaceModal({ open, onClose, onSubmit }: Props) {
                     key={cat.id}
                     className={`am-cat-item${checked ? ' am-cat-item--checked' : ''}${disabled ? ' am-cat-item--disabled' : ''}`}
                   >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      disabled={disabled}
-                      onChange={() => toggleCat(cat.id)}
-                    />
+                    <input type="checkbox" checked={checked} disabled={disabled} onChange={() => toggleCat(cat.id)} />
                     <span>{cat.label}</span>
                   </label>
                 );
               })}
             </div>
-            <p className="am-cats-count">Выбрано: {cats.length}/{MAX_CATS}</p>
+            <p className="am-cats-count">
+              Выбрано: {cats.length}/{MAX_CATS}
+            </p>
           </div>
 
           {/* Dish + Price */}
@@ -154,8 +153,7 @@ export default function AddPlaceModal({ open, onClose, onSubmit }: Props) {
           <div className="am-notice">
             <span className="am-notice-badge">Важно</span>
             <p className="am-notice-text">
-              Добавляйте только реальные заведения с актуальными ценами.
-              Объявления могут быть удалены после проверки.
+              Добавляйте только реальные заведения с актуальными ценами. Объявления могут быть удалены после проверки.
             </p>
           </div>
 
@@ -191,7 +189,6 @@ export default function AddPlaceModal({ open, onClose, onSubmit }: Props) {
               Сохранить
             </button>
           </div>
-
         </form>
       </div>
     </div>

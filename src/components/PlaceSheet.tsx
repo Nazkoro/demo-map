@@ -25,11 +25,11 @@ function getCategoryLabels(ids: string[]): string[] {
 }
 
 export default function PlaceSheet({ place, onClose, onVote, onDelete }: Props) {
-  if (!place) return null;
+  if (!place) {
+    return null;
+  }
 
-  const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-    `${place.lat},${place.lng}`,
-  )}`;
+  const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${place.lat},${place.lng}`)}`;
   const categoryLabels = getCategoryLabels(place.categories);
   const categoryText = categoryLabels.join(', ') || 'Не указана';
   const score = place.votesUp - place.votesDown;
@@ -46,12 +46,7 @@ export default function PlaceSheet({ place, onClose, onVote, onDelete }: Props) 
 
   return (
     <div className="place-sheet-layer" aria-live="polite">
-      <button
-        type="button"
-        className="place-sheet-backdrop"
-        onClick={onClose}
-        aria-label="Закрыть карточку"
-      />
+      <button type="button" className="place-sheet-backdrop" onClick={onClose} aria-label="Закрыть карточку" />
       <section className="place-sheet" role="dialog" aria-labelledby="placeSheetTitle">
         <div className="place-sheet-handle" />
         <div className="place-popup-head">
@@ -118,18 +113,10 @@ export default function PlaceSheet({ place, onClose, onVote, onDelete }: Props) 
           )}
 
           <div className="place-popup-actions-row">
-            <button
-              type="button"
-              className="place-popup-pill-button"
-              onClick={() => onVote(place.id, true)}
-            >
+            <button type="button" className="place-popup-pill-button" onClick={() => onVote(place.id, true)}>
               ❤ {place.votesUp}
             </button>
-            <button
-              type="button"
-              className="place-popup-pill-button"
-              onClick={() => onVote(place.id, true)}
-            >
+            <button type="button" className="place-popup-pill-button" onClick={() => onVote(place.id, true)}>
               Цена/Качество ↑
             </button>
           </div>
@@ -138,18 +125,15 @@ export default function PlaceSheet({ place, onClose, onVote, onDelete }: Props) 
             <a href={mapUrl} target="_blank" rel="noreferrer" className="place-popup-pill-button place-popup-pill-link">
               Посмотреть на картах
             </a>
-            <button
-              type="button"
-              className="place-popup-pill-button"
-              onClick={() => onVote(place.id, false)}
-            >
+            <button type="button" className="place-popup-pill-button" onClick={() => onVote(place.id, false)}>
               Цена/Качество ↓
             </button>
           </div>
 
           <div className="place-popup-footer">
             <span className={`place-popup-score${score < 0 ? ' is-negative' : ''}`}>
-              Рейтинг: {score >= 0 ? '+' : ''}{score}
+              Рейтинг: {score >= 0 ? '+' : ''}
+              {score}
             </span>
             <button type="button" className="place-popup-delete" onClick={() => onDelete(place.id)}>
               Удалить место
@@ -164,24 +148,13 @@ export default function PlaceSheet({ place, onClose, onVote, onDelete }: Props) 
 
             <div className="place-popup-comment-composer">
               <div className="place-popup-comment-auth">
-                <input
-                  className="place-popup-comment-input"
-                  type="text"
-                  placeholder="Никнейм"
-                />
-                <input
-                  className="place-popup-comment-input"
-                  type="password"
-                  placeholder="Пароль"
-                />
+                <input className="place-popup-comment-input" type="text" placeholder="Никнейм" />
+                <input className="place-popup-comment-input" type="password" placeholder="Пароль" />
                 <button type="button" className="place-popup-comment-register">
                   Регистрация
                 </button>
               </div>
-              <textarea
-                className="place-popup-comment-textarea"
-                placeholder="Оставьте ваш отзыв..."
-              />
+              <textarea className="place-popup-comment-textarea" placeholder="Оставьте ваш отзыв..." />
               <div className="place-popup-comment-tools">
                 <button type="button" className="place-popup-comment-chip">
                   Добавить фото 0/5

@@ -30,9 +30,7 @@ export default function RecentRegistrationsPanel({
   onSelectPlace,
   onClose,
 }: Props) {
-  const recentPlaces = [...places]
-    .sort((a, b) => b.createdAt - a.createdAt)
-    .slice(0, 3);
+  const recentPlaces = [...places].sort((a, b) => b.createdAt - a.createdAt).slice(0, 3);
 
   const priceLabel = isFullPriceRange(priceMin, priceMax)
     ? 'Любой чек'
@@ -46,7 +44,9 @@ export default function RecentRegistrationsPanel({
           <h2 className="map-overlay-title">Что недавно появилось</h2>
         </div>
         <div className="map-overlay-actions">
-          <span className="map-overlay-badge">{visibleCount}/{totalCount}</span>
+          <span className="map-overlay-badge">
+            {visibleCount}/{totalCount}
+          </span>
           <button
             type="button"
             className="map-overlay-close"
@@ -70,12 +70,7 @@ export default function RecentRegistrationsPanel({
       <div className="map-recent-list" role="list">
         {recentPlaces.length > 0 ? (
           recentPlaces.map((place, index) => (
-            <button
-              key={place.id}
-              type="button"
-              className="map-recent-item"
-              onClick={() => onSelectPlace(place)}
-            >
+            <button key={place.id} type="button" className="map-recent-item" onClick={() => onSelectPlace(place)}>
               <span className="map-recent-index">#{index + 1}</span>
               <div className="map-recent-content">
                 <div className="map-recent-title-row">

@@ -13,14 +13,7 @@ interface Props {
 
 const MAX_SELECTED_CATEGORIES = 3;
 
-export default function PriceModal({
-  open,
-  priceMin,
-  priceMax,
-  selectedCategories,
-  onClose,
-  onApply,
-}: Props) {
+export default function PriceModal({ open, priceMin, priceMax, selectedCategories, onClose, onApply }: Props) {
   const [localMin, setLocalMin] = useState(priceMin);
   const [localMax, setLocalMax] = useState(priceMax);
   const [localCategories, setLocalCategories] = useState<string[]>(selectedCategories);
@@ -40,7 +33,9 @@ export default function PriceModal({
     return `linear-gradient(to right, #d8dbe8 ${p1}%, #1a1c2e ${p1}%, #1a1c2e ${p2}%, #d8dbe8 ${p2}%)`;
   }, [localMin, localMax]);
 
-  if (!open) return null;
+  if (!open) {
+    return null;
+  }
 
   function handleMinChange(v: number) {
     setLocalMin(Math.min(v, localMax));
@@ -69,10 +64,7 @@ export default function PriceModal({
   }
 
   return (
-    <div
-      className="modal modal-glass active"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
+    <div className="modal modal-glass active" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="glass-modal-card" role="dialog" aria-labelledby="modalPriceTitle">
         <div className="glass-modal-head">
           <h3 id="modalPriceTitle">Фильтр цен</h3>
@@ -145,8 +137,7 @@ export default function PriceModal({
           </div>
         </div>
         <p className="glass-modal-hint">
-          Учитываются числа из поля «цены» у точки (любая валюта). Без цифр — точка скрывается при
-          сужении диапазона.
+          Учитываются числа из поля «цены» у точки (любая валюта). Без цифр — точка скрывается при сужении диапазона.
         </p>
         <button type="button" className="glass-btn-apply" onClick={handleApply}>
           Применить
