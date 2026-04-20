@@ -34,6 +34,8 @@ const CLUSTER_COUNT_LAYER_ID = 'places-cluster-count';
 const UNCLUSTERED_POINTS_LAYER_ID = 'places-unclustered-points';
 // Текст "1" для одиночной точки в кластерном режиме.
 const UNCLUSTERED_COUNT_LAYER_ID = 'places-unclustered-count';
+const UNCLUSTERED_LOW_POINTS_LAYER_ID = 'places-unclustered-low-points';
+const UNCLUSTERED_LOW_COUNT_LAYER_ID = 'places-unclustered-low-count';
 const CLUSTER_MARKER_ZOOM = 10;
 
 interface Toast {
@@ -69,6 +71,7 @@ function buildClusterGeoJson(places: Place[]) {
       type: 'Feature' as const,
       properties: {
         id: place.id,
+        markerLabel: `${getFirstEmoji(place.categories)}${place.price ? ` ${place.price.toLocaleString('ru-RU')}` : ''}`,
       },
       geometry: {
         type: 'Point' as const,
@@ -90,7 +93,6 @@ function isClusterZoom(zoom: number): boolean {
 export default function App() {
   const mapContainerRef = useRef<HTMLDivElement>(null!);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const currentMarkersRef = useRef<maplibregl.Marker[]>([]);
   const addModeClickHandlerRef = useRef<((e: maplibregl.MapMouseEvent) => void) | null>(null);
 
   const [places, setPlaces] = useState<Place[]>([]);
@@ -141,6 +143,7 @@ export default function App() {
       style: MAP_STYLE,
       center: MAP_CENTER,
       zoom: MAP_ZOOM,
+      renderWorldCopies: false,
       minZoom: 5,
       maxZoom: 18,
       pitch: 0,
@@ -178,11 +181,19 @@ export default function App() {
       map.easeTo({ center: [lng, lat], zoom: Math.min(targetZoom, 18), duration: 250 });
     };
 
-    // Одиночная точка ведёт себя как "кластер из 1": клик переводит к маркерам.
+    // Одиночная точка: на малом зуме приближаем, на большом открываем карточку.
     const zoomIntoSingleClusterPoint = (e: maplibregl.MapLayerMouseEvent) => {
       const feature = e.features?.[0];
       const geometry = feature?.geometry;
       if (!geometry || geometry.type !== 'Point') {
+        return;
+      }
+
+      const id = feature.properties?.id;
+      if (!isClusterZoom(map.getZoom())) {
+        if (id) {
+          setSelectedPlaceId(String(id));
+        }
         return;
       }
 
@@ -201,7 +212,6 @@ export default function App() {
     };
 
     map.on('load', async () => {
-      map.setProjection({ type: 'mercator' }); // ?? why?
       map.addSource(CLUSTER_SOURCE_ID, {
         type: 'geojson',
         data: buildClusterGeoJson([]),
@@ -243,14 +253,15 @@ export default function App() {
         },
       });
 
+      // Одиночные точки на low zoom (когда точка не попала в кластер).
+      // Иначе в диапазоне ~8-10 появляется "дыра": кластеров уже нет, а маркеры ещё скрыты.
       map.addLayer({
-        id: UNCLUSTERED_POINTS_LAYER_ID,
+        id: UNCLUSTERED_LOW_POINTS_LAYER_ID,
         type: 'circle',
         source: CLUSTER_SOURCE_ID,
         maxzoom: CLUSTER_MARKER_ZOOM,
         filter: ['!', ['has', 'point_count']],
         paint: {
-          // Единый визуал с кластерами, чтобы "1" не выглядела чёрной точкой.
           'circle-color': '#b8d3ff',
           'circle-radius': 16,
           'circle-stroke-color': '#6f9df2',
@@ -259,7 +270,7 @@ export default function App() {
       });
 
       map.addLayer({
-        id: UNCLUSTERED_COUNT_LAYER_ID,
+        id: UNCLUSTERED_LOW_COUNT_LAYER_ID,
         type: 'symbol',
         source: CLUSTER_SOURCE_ID,
         maxzoom: CLUSTER_MARKER_ZOOM,
@@ -276,12 +287,49 @@ export default function App() {
         },
       });
 
+      map.addLayer({
+        id: UNCLUSTERED_POINTS_LAYER_ID,
+        type: 'circle',
+        source: CLUSTER_SOURCE_ID,
+        minzoom: CLUSTER_MARKER_ZOOM,
+        filter: ['!', ['has', 'point_count']],
+        paint: {
+          // Визуально ближе к прежней "пилюле": светлая подложка + зелёная обводка.
+          'circle-color': '#ffffff',
+          'circle-radius': 22,
+          'circle-stroke-color': '#2ecc71',
+          'circle-stroke-width': 2,
+          'circle-blur': 0,
+        },
+      });
+
+      map.addLayer({
+        id: UNCLUSTERED_COUNT_LAYER_ID,
+        type: 'symbol',
+        source: CLUSTER_SOURCE_ID,
+        minzoom: CLUSTER_MARKER_ZOOM,
+        filter: ['!', ['has', 'point_count']],
+        layout: {
+          'text-field': ['get', 'markerLabel'],
+          'text-font': ['Open Sans Bold'],
+          'text-size': 13,
+        },
+        paint: {
+          'text-color': '#1a1c1a',
+          'text-halo-color': '#ffffff',
+          'text-halo-width': 1.5,
+        },
+      });
+
       map.on('click', CLUSTER_CIRCLES_LAYER_ID, zoomIntoCluster);
       map.on('click', UNCLUSTERED_POINTS_LAYER_ID, zoomIntoSingleClusterPoint);
+      map.on('click', UNCLUSTERED_LOW_POINTS_LAYER_ID, zoomIntoSingleClusterPoint);
       map.on('mouseenter', CLUSTER_CIRCLES_LAYER_ID, setClusterCursor);
       map.on('mouseenter', UNCLUSTERED_POINTS_LAYER_ID, setClusterCursor);
+      map.on('mouseenter', UNCLUSTERED_LOW_POINTS_LAYER_ID, setClusterCursor);
       map.on('mouseleave', CLUSTER_CIRCLES_LAYER_ID, resetClusterCursor);
       map.on('mouseleave', UNCLUSTERED_POINTS_LAYER_ID, resetClusterCursor);
+      map.on('mouseleave', UNCLUSTERED_LOW_POINTS_LAYER_ID, resetClusterCursor);
 
       syncZoom();
       if (!supabase) {
@@ -290,7 +338,7 @@ export default function App() {
       try {
         const data = await loadPlaces();
         setPlaces(data);
-        rebuildMarkers(map, data, selectedPlaceId);
+        updateClusterSource(map, data);
         
         if (data.length === 0) {
           showToast('Пока нет точек. Добавьте первое заведение', 'info');
@@ -312,10 +360,13 @@ export default function App() {
     return () => {
       map.off('click', CLUSTER_CIRCLES_LAYER_ID, zoomIntoCluster);
       map.off('click', UNCLUSTERED_POINTS_LAYER_ID, zoomIntoSingleClusterPoint);
+      map.off('click', UNCLUSTERED_LOW_POINTS_LAYER_ID, zoomIntoSingleClusterPoint);
       map.off('mouseenter', CLUSTER_CIRCLES_LAYER_ID, setClusterCursor);
       map.off('mouseenter', UNCLUSTERED_POINTS_LAYER_ID, setClusterCursor);
+      map.off('mouseenter', UNCLUSTERED_LOW_POINTS_LAYER_ID, setClusterCursor);
       map.off('mouseleave', CLUSTER_CIRCLES_LAYER_ID, resetClusterCursor);
       map.off('mouseleave', UNCLUSTERED_POINTS_LAYER_ID, resetClusterCursor);
+      map.off('mouseleave', UNCLUSTERED_LOW_POINTS_LAYER_ID, resetClusterCursor);
       map.off('zoom', syncZoom);
       map.remove();
       mapRef.current = null;
@@ -341,77 +392,19 @@ export default function App() {
     if (!map || !map.getSource(CLUSTER_SOURCE_ID)) {
       return;
     }
-    rebuildMarkers(map, visiblePlaces, selectedPlaceId);
+    updateClusterSource(map, visiblePlaces);
     // Зависим от mapMode, а не currentZoom, чтобы не пересобирать DOM-маркеры
     // на каждом кадре анимации зума — только при фактическом переключении режима.
-  }, [visiblePlaces, selectedPlaceId, mapMode]);
+  }, [visiblePlaces, mapMode]);
 
   function closeAllPopups() {
     setSelectedPlaceId(null);
   }
 
   function rebuildMarkers(map: maplibregl.Map, visible: Place[], activePlaceId: string | null) {
-    currentMarkersRef.current.forEach((m) => m.remove());
-    currentMarkersRef.current = [];
-
-    if (isClusterZoom(map.getZoom())) {
-      // Кластерный режим: источник получает точки, DOM-маркеров нет.
-      updateClusterSource(map, visible);
-      return;
-    }
-
-    // Режим маркеров: явно опустошаем источник кластеров, чтобы на границе
-    // перехода (zoom ≈ 10) не оставались «висящие» круги и счётчики.
-    updateClusterSource(map, []);
-
-    visible.forEach((place) => {
-      const emoji = getFirstEmoji(place.categories);
-      const priceText = place.price ? place.price.toLocaleString('ru-RU') : '';
-
-      const tooltipRows = [
-        `<span class="mtt-name">${escapeHtml(place.name)}</span>`,
-        place.address ? `<span class="mtt-row">${escapeHtml(place.address)}</span>` : '',
-        place.hours ? `<span class="mtt-row">${escapeHtml(place.hours)}</span>` : '',
-      ]
-        .filter(Boolean)
-        .join('');
-
-      const el = document.createElement('div');
-      el.className = `map-marker-pill${String(place.id) === String(activePlaceId) ? ' map-marker-pill--active' : ''}`;
-
-      const emojiEl = document.createElement('span');
-      emojiEl.className = 'map-marker-emoji';
-      emojiEl.textContent = emoji;
-
-      el.appendChild(emojiEl);
-
-      if (priceText) {
-        const priceEl = document.createElement('span');
-        priceEl.className = 'map-marker-price';
-        priceEl.textContent = priceText;
-        el.appendChild(priceEl);
-      }
-
-      const tooltipEl = document.createElement('div');
-      tooltipEl.className = 'mtt';
-      tooltipEl.innerHTML = tooltipRows;
-      el.appendChild(tooltipEl);
-
-      const marker = new maplibregl.Marker({
-        element: el,
-        anchor: 'bottom',
-        subpixelPositioning: true,
-      })
-        .setLngLat([place.lng, place.lat])
-        .addTo(map);
-
-      marker.getElement().addEventListener('click', (e) => {
-        e.stopPropagation();
-        setSelectedPlaceId(place.id);
-      });
-
-      currentMarkersRef.current.push(marker);
-    });
+    void map;
+    void activePlaceId;
+    updateClusterSource(map, visible);
   }
 
   // ── Keyboard ───────────────────────────────────────────────────────────────
