@@ -193,7 +193,7 @@ export default function App() {
         data: buildClusterGeoJson([]),
         cluster: true,
         clusterMaxZoom: CLUSTER_MARKER_ZOOM - 1,
-        clusterRadius: 56,
+        clusterRadius: 40,
       });
 
       map.addLayer({
@@ -203,10 +203,10 @@ export default function App() {
         maxzoom: CLUSTER_MARKER_ZOOM,
         filter: ['has', 'point_count'],
         paint: {
-          'circle-color': '#ffffff',
-          'circle-stroke-color': 'rgba(31, 36, 48, 0.12)',
-          'circle-stroke-width': 1.5,
-          'circle-radius': ['step', ['get', 'point_count'], 18, 5, 20, 10, 24, 20, 28],
+          'circle-color': '#b8d3ff',
+          'circle-stroke-color': '#6f9df2',
+          'circle-stroke-width': 2,
+          'circle-radius': ['step', ['get', 'point_count'], 18, 5, 22, 10, 25, 20, 28],
           'circle-blur': 0,
         },
       });
@@ -220,10 +220,12 @@ export default function App() {
         layout: {
           'text-field': ['get', 'point_count_abbreviated'],
           'text-font': ['Open Sans Bold'],
-          'text-size': 12,
+          'text-size': 14,
         },
         paint: {
-          'text-color': '#1f2430',
+          'text-color': '#2558ab',
+          'text-halo-color': '#e9f1ff',
+          'text-halo-width': 1,
         },
       });
 
