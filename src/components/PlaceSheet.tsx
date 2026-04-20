@@ -1,3 +1,5 @@
+import type { MouseEvent } from 'react';
+
 import type { Place } from '../types';
 import { CATEGORIES, getFirstEmoji } from '../lib/categories';
 
@@ -24,6 +26,10 @@ function getCategoryLabels(ids: string[]): string[] {
   return ids.map((id) => CATEGORIES.find((item) => item.id === id)?.label ?? id);
 }
 
+function closeHeadMenu(e: MouseEvent<Element>) {
+  (e.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open');
+}
+
 export default function PlaceSheet({ place, onClose, onVote, onDelete }: Props) {
   if (!place) {
     return null;
@@ -32,7 +38,11 @@ export default function PlaceSheet({ place, onClose, onVote, onDelete }: Props) 
   const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${place.lat},${place.lng}`)}`;
   const categoryLabels = getCategoryLabels(place.categories);
   const categoryText = categoryLabels.join(', ') || 'Не указана';
-  const score = place.votesUp - place.votesDown;
+  const totalVotes = place.votesUp + place.votesDown;
+  const growthPct = totalVotes > 0 ? Math.round((place.votesUp / totalVotes) * 100) : 0;
+  const declinePct = totalVotes > 0 ? Math.round((place.votesDown / totalVotes) * 100) : 0;
+  const barUp = totalVotes === 0 ? 50 : growthPct;
+  const barDown = totalVotes === 0 ? 50 : declinePct;
   const syntheticComments = place.note
     ? [
         {
@@ -56,26 +66,55 @@ export default function PlaceSheet({ place, onClose, onVote, onDelete }: Props) 
             </h2>
             <p className="place-popup-address">{place.address || 'Адрес не указан'}</p>
           </div>
-          <button type="button" className="place-popup-close" onClick={onClose} aria-label="Закрыть">
-            ⋯
-          </button>
+          <div className="place-popup-head-actions">
+            <a
+              href={mapUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="place-popup-head-icon place-popup-head-icon--link"
+              aria-label="Открыть на карте"
+            >
+              ›
+            </a>
+            <details className="place-popup-menu-wrap">
+              <summary className="place-popup-head-icon place-popup-menu-trigger" aria-label="Меню">
+                ⋯
+              </summary>
+              <div className="place-popup-menu">
+                <button
+                  type="button"
+                  className="place-popup-menu-item"
+                  onClick={(e) => {
+                    closeHeadMenu(e);
+                    onDelete(place.id);
+                  }}
+                >
+                  Удалить место
+                </button>
+                <button
+                  type="button"
+                  className="place-popup-menu-item"
+                  onClick={(e) => {
+                    closeHeadMenu(e);
+                    onClose();
+                  }}
+                >
+                  Закрыть
+                </button>
+              </div>
+            </details>
+          </div>
         </div>
 
         <div className="place-popup-scroll">
           <div className="place-popup-media-row">
             <div className="place-popup-media-card">
               <div className="place-popup-media-emoji">{getFirstEmoji(place.categories)}</div>
-              <p className="place-popup-media-caption">Нет фото</p>
+              <p className="place-popup-media-caption">Нет изображения</p>
             </div>
-            <a
-              href={mapUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="place-popup-add-button"
-              aria-label="Открыть место в картах"
-            >
-              ↗
-            </a>
+            <button type="button" className="place-popup-add-button" disabled aria-label="Добавить фото (скоро)">
+              +
+            </button>
           </div>
 
           <div className="place-popup-grid">
@@ -95,14 +134,14 @@ export default function PlaceSheet({ place, onClose, onVote, onDelete }: Props) 
               <p className="place-popup-card-text">{place.dish || 'Не указано'}</p>
             </div>
             <div className="place-popup-info-card">
-              <p className="place-popup-card-label">Обновлено</p>
+              <p className="place-popup-card-label">Подано</p>
               <p className="place-popup-card-text">{formatDate(place.createdAt)}</p>
             </div>
           </div>
 
           <div className="place-popup-note-card">
-            <p className="place-popup-card-label">Заметка</p>
-            <p className="place-popup-note-text">{place.note || 'Пока без заметки.'}</p>
+            <p className="place-popup-card-label">Примечание</p>
+            <p className="place-popup-note-text">{place.note || 'Пока без текста.'}</p>
           </div>
 
           {place.hours && (
@@ -112,40 +151,35 @@ export default function PlaceSheet({ place, onClose, onVote, onDelete }: Props) 
             </div>
           )}
 
-          <div className="place-popup-actions-row">
-            <button type="button" className="place-popup-pill-button" onClick={() => onVote(place.id, true)}>
-              ❤ {place.votesUp}
-            </button>
-            <button type="button" className="place-popup-pill-button" onClick={() => onVote(place.id, true)}>
-              Цена/Качество ↑
-            </button>
+          <div className="place-popup-vote-wrap">
+            <div className="place-popup-vote-bar" aria-hidden="true">
+              <div className="place-popup-vote-bar-up" style={{ width: `${barUp}%` }} />
+              <div className="place-popup-vote-bar-down" style={{ width: `${barDown}%` }} />
+            </div>
+            <div className="place-popup-vote-labels">
+              <span className="place-popup-vote-label place-popup-vote-label--up">Рост {growthPct}%</span>
+              <span className="place-popup-vote-label place-popup-vote-label--down">Снижение на {declinePct}%</span>
+            </div>
           </div>
 
-          <div className="place-popup-actions-col">
+          <div className="place-popup-actions-grid">
+            <button type="button" className="place-popup-pill-button" onClick={() => onVote(place.id, true)}>
+              <span aria-hidden="true">❤</span> {place.votesUp}
+            </button>
+            <button type="button" className="place-popup-pill-button" onClick={() => onVote(place.id, true)}>
+              Значение ↑
+            </button>
             <a href={mapUrl} target="_blank" rel="noreferrer" className="place-popup-pill-button place-popup-pill-link">
-              Посмотреть на картах
+              Открыть на карте
             </a>
             <button type="button" className="place-popup-pill-button" onClick={() => onVote(place.id, false)}>
-              Цена/Качество ↓
+              Ценность ↓
             </button>
           </div>
 
-          <div className="place-popup-footer">
-            <span className={`place-popup-score${score < 0 ? ' is-negative' : ''}`}>
-              Рейтинг: {score >= 0 ? '+' : ''}
-              {score}
-            </span>
-            <button type="button" className="place-popup-delete" onClick={() => onDelete(place.id)}>
-              Удалить место
-            </button>
-          </div>
+          <p className="place-popup-comments-bar">Комментарии: {syntheticComments.length}</p>
 
           <div className="place-popup-comments">
-            <div className="place-popup-comments-head">
-              <h4 className="place-popup-comments-title">Комментарии</h4>
-              <span className="place-popup-comments-count">{syntheticComments.length}</span>
-            </div>
-
             <div className="place-popup-comment-composer">
               <div className="place-popup-comment-auth">
                 <input className="place-popup-comment-input" type="text" placeholder="Никнейм" />
