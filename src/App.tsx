@@ -513,7 +513,7 @@ export default function App() {
             />
           ) : (
             <button type="button" className="map-panel-reopen" onClick={() => setRecentPanelOpen(true)}>
-              Свежие
+              Оценка
             </button>
           )}
         </div>

@@ -42,7 +42,8 @@ export default function RecentRegistrationsPanel({ places, onSelectPlace, onClos
     <section className="map-overlay-sheet map-recent-registrations-card" aria-label="Свежие добавления">
       <header className="map-recent-sheet-head">
         <div className="map-recent-sheet-head-text">
-          <h2 className="map-recent-panel-title">Свежие добавления</h2>
+        <h2 className="map-recent-panel-title">Оценка</h2>
+          {/* <h2 className="map-recent-panel-title">Свежие добавления</h2> */}
           <p className="map-recent-panel-sub">Пожалуйста, дайте строгий отзыв.</p>
         </div>
         <button
