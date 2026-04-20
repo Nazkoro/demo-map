@@ -81,6 +81,10 @@ function updateClusterSource(map: maplibregl.Map, places: Place[]) {
   source?.setData(buildClusterGeoJson(places));
 }
 
+function isClusterZoom(zoom: number): boolean {
+  return zoom < CLUSTER_MARKER_ZOOM;
+}
+
 export default function App() {
   const mapContainerRef = useRef<HTMLDivElement>(null!);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -146,16 +150,30 @@ export default function App() {
       setCurrentZoom(map.getZoom());
     };
 
-    const zoomIntoCluster = (e: maplibregl.MapLayerMouseEvent) => {
+    const zoomIntoCluster = async (e: maplibregl.MapLayerMouseEvent) => {
       const feature = e.features?.[0];
       const geometry = feature?.geometry;
-      if (!geometry || geometry.type !== 'Point') {
+      const clusterId = feature?.properties?.cluster_id;
+      if (!geometry || geometry.type !== 'Point' || clusterId == null) {
         return;
       }
 
       const [lng, lat] = geometry.coordinates as [number, number];
-      const nextZoom = Math.min(Math.max(map.getZoom() + 1, CLUSTER_MARKER_ZOOM), 18);
-      map.easeTo({ center: [lng, lat], zoom: nextZoom, duration: 250 });
+      const source = map.getSource(CLUSTER_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+
+      let targetZoom = CLUSTER_MARKER_ZOOM;
+      if (source) {
+        try {
+          const expansionZoom = await source.getClusterExpansionZoom(clusterId as number);
+          // Если все точки кластера в одной координате (expansionZoom >= maxZoom),
+          // всё равно уходим минимум в режим маркеров.
+          targetZoom = Math.max(expansionZoom, CLUSTER_MARKER_ZOOM);
+        } catch {
+          // fallback — просто уйдём в режим маркеров
+        }
+      }
+
+      map.easeTo({ center: [lng, lat], zoom: Math.min(targetZoom, 18), duration: 250 });
     };
 
     const setClusterCursor = () => {
@@ -169,7 +187,7 @@ export default function App() {
     };
 
     map.on('load', async () => {
-      map.setProjection({ type: 'mercator' });
+      map.setProjection({ type: 'mercator' }); // ?? why?
       map.addSource(CLUSTER_SOURCE_ID, {
         type: 'geojson',
         data: buildClusterGeoJson([]),
@@ -233,8 +251,9 @@ export default function App() {
       }
       try {
         const data = await loadPlaces();
-        updateClusterSource(map, data);
         setPlaces(data);
+        rebuildMarkers(map, data, selectedPlaceId);
+        
         if (data.length === 0) {
           showToast('Пока нет точек. Добавьте первое заведение', 'info');
         }
@@ -269,21 +288,21 @@ export default function App() {
     [places, priceMin, priceMax, selectedCategories, nameQuery, focusBypassId],
   );
 
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !map.loaded()) {
-      return;
-    }
-    updateClusterSource(map, visiblePlaces);
-  }, [visiblePlaces]);
+  const mapMode: 'cluster' | 'markers' = isClusterZoom(currentZoom) ? 'cluster' : 'markers';
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.loaded()) {
+    // `map.loaded()` во время активной анимации зума может возвращать false
+    // (идёт загрузка тайлов), что раньше отсекало единственный триггер эффекта
+    // на смену mapMode и кластеры переставали обновляться.
+    // Достаточно убедиться, что источник уже добавлен (то есть отработал `load`).
+    if (!map || !map.getSource(CLUSTER_SOURCE_ID)) {
       return;
     }
     rebuildMarkers(map, visiblePlaces, selectedPlaceId);
-  }, [visiblePlaces, selectedPlaceId, currentZoom]);
+    // Зависим от mapMode, а не currentZoom, чтобы не пересобирать DOM-маркеры
+    // на каждом кадре анимации зума — только при фактическом переключении режима.
+  }, [visiblePlaces, selectedPlaceId, mapMode]);
 
   function closeAllPopups() {
     setSelectedPlaceId(null);
@@ -293,9 +312,15 @@ export default function App() {
     currentMarkersRef.current.forEach((m) => m.remove());
     currentMarkersRef.current = [];
 
-    if (map.getZoom() < CLUSTER_MARKER_ZOOM) {
+    if (isClusterZoom(map.getZoom())) {
+      // Кластерный режим: источник получает точки, DOM-маркеров нет.
+      updateClusterSource(map, visible);
       return;
     }
+
+    // Режим маркеров: явно опустошаем источник кластеров, чтобы на границе
+    // перехода (zoom ≈ 10) не оставались «висящие» круги и счётчики.
+    updateClusterSource(map, []);
 
     visible.forEach((place) => {
       const emoji = getFirstEmoji(place.categories);
