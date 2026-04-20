@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import maplibregl from 'maplibre-gl';
 
 import type { Place, PlaceFormData } from './types';
-import { getFirstEmoji } from './lib/categories';
 import { loadPlaces, insertPlace, updateVotes, removePlace } from './lib/places';
 import {
   PRICE_SLIDER_MIN,
@@ -14,6 +13,17 @@ import {
   placePassesNameFilter,
 } from './lib/filters';
 import { supabase } from './lib/supabase';
+import {
+  addMarkerLayers,
+  CLUSTER_CIRCLES_LAYER_ID,
+  CLUSTER_MARKER_ZOOM,
+  CLUSTER_SOURCE_ID,
+  ensureMarkerAssets,
+  isClusterZoom,
+  UNCLUSTERED_LOW_POINTS_LAYER_ID,
+  UNCLUSTERED_POINTS_LAYER_ID,
+  updateClusterSource,
+} from './lib/mapMarkerHandler';
 
 import MapView from './components/MapView';
 import FabStack from './components/FabStack';
@@ -28,15 +38,6 @@ import MapSidebar from './components/MapSidebar';
 const MAP_STYLE = 'https://tiles.versatiles.org/assets/styles/colorful/style.json';
 const MAP_CENTER: [number, number] = [27.5618, 53.9023];
 const MAP_ZOOM = 12;
-const CLUSTER_SOURCE_ID = 'places-clusters';
-const CLUSTER_CIRCLES_LAYER_ID = 'places-cluster-circles';
-const CLUSTER_COUNT_LAYER_ID = 'places-cluster-count';
-const UNCLUSTERED_POINTS_LAYER_ID = 'places-unclustered-points';
-// Текст "1" для одиночной точки в кластерном режиме.
-const UNCLUSTERED_COUNT_LAYER_ID = 'places-unclustered-count';
-const UNCLUSTERED_LOW_POINTS_LAYER_ID = 'places-unclustered-low-points';
-const UNCLUSTERED_LOW_COUNT_LAYER_ID = 'places-unclustered-low-count';
-const CLUSTER_MARKER_ZOOM = 10;
 
 interface Toast {
   msg: string;
@@ -47,47 +48,6 @@ interface Toast {
 interface SearchChip {
   text: string;
   placeId: string;
-}
-
-function escapeHtml(str: string): string {
-  return str.replace(/[&<>]/g, (m) => {
-    if (m === '&') {
-      return '&amp;';
-    }
-    if (m === '<') {
-      return '&lt;';
-    }
-    if (m === '>') {
-      return '&gt;';
-    }
-    return m;
-  });
-}
-
-function buildClusterGeoJson(places: Place[]) {
-  return {
-    type: 'FeatureCollection' as const,
-    features: places.map((place) => ({
-      type: 'Feature' as const,
-      properties: {
-        id: place.id,
-        markerLabel: `${getFirstEmoji(place.categories)}${place.price ? ` ${place.price.toLocaleString('ru-RU')}` : ''}`,
-      },
-      geometry: {
-        type: 'Point' as const,
-        coordinates: [place.lng, place.lat] as [number, number],
-      },
-    })),
-  };
-}
-
-function updateClusterSource(map: maplibregl.Map, places: Place[]) {
-  const source = map.getSource(CLUSTER_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
-  source?.setData(buildClusterGeoJson(places));
-}
-
-function isClusterZoom(zoom: number): boolean {
-  return zoom < CLUSTER_MARKER_ZOOM;
 }
 
 export default function App() {
@@ -212,114 +172,7 @@ export default function App() {
     };
 
     map.on('load', async () => {
-      map.addSource(CLUSTER_SOURCE_ID, {
-        type: 'geojson',
-        data: buildClusterGeoJson([]),
-        cluster: true,
-        clusterMaxZoom: CLUSTER_MARKER_ZOOM - 1,
-        clusterRadius: 40,
-      });
-
-      map.addLayer({
-        id: CLUSTER_CIRCLES_LAYER_ID,
-        type: 'circle',
-        source: CLUSTER_SOURCE_ID,
-        maxzoom: CLUSTER_MARKER_ZOOM,
-        filter: ['has', 'point_count'],
-        paint: {
-          'circle-color': '#b8d3ff',
-          'circle-stroke-color': '#6f9df2',
-          'circle-stroke-width': 2,
-          'circle-radius': ['step', ['get', 'point_count'], 18, 5, 22, 10, 25, 20, 28],
-          'circle-blur': 0,
-        },
-      });
-
-      map.addLayer({
-        id: CLUSTER_COUNT_LAYER_ID,
-        type: 'symbol',
-        source: CLUSTER_SOURCE_ID,
-        maxzoom: CLUSTER_MARKER_ZOOM,
-        filter: ['has', 'point_count'],
-        layout: {
-          'text-field': ['get', 'point_count_abbreviated'],
-          'text-font': ['Open Sans Bold'],
-          'text-size': 14,
-        },
-        paint: {
-          'text-color': '#2558ab',
-          'text-halo-color': '#e9f1ff',
-          'text-halo-width': 1,
-        },
-      });
-
-      // Одиночные точки на low zoom (когда точка не попала в кластер).
-      // Иначе в диапазоне ~8-10 появляется "дыра": кластеров уже нет, а маркеры ещё скрыты.
-      map.addLayer({
-        id: UNCLUSTERED_LOW_POINTS_LAYER_ID,
-        type: 'circle',
-        source: CLUSTER_SOURCE_ID,
-        maxzoom: CLUSTER_MARKER_ZOOM,
-        filter: ['!', ['has', 'point_count']],
-        paint: {
-          'circle-color': '#b8d3ff',
-          'circle-radius': 16,
-          'circle-stroke-color': '#6f9df2',
-          'circle-stroke-width': 2,
-        },
-      });
-
-      map.addLayer({
-        id: UNCLUSTERED_LOW_COUNT_LAYER_ID,
-        type: 'symbol',
-        source: CLUSTER_SOURCE_ID,
-        maxzoom: CLUSTER_MARKER_ZOOM,
-        filter: ['!', ['has', 'point_count']],
-        layout: {
-          'text-field': '1',
-          'text-font': ['Open Sans Bold'],
-          'text-size': 14,
-        },
-        paint: {
-          'text-color': '#2558ab',
-          'text-halo-color': '#e9f1ff',
-          'text-halo-width': 1,
-        },
-      });
-
-      map.addLayer({
-        id: UNCLUSTERED_POINTS_LAYER_ID,
-        type: 'circle',
-        source: CLUSTER_SOURCE_ID,
-        minzoom: CLUSTER_MARKER_ZOOM,
-        filter: ['!', ['has', 'point_count']],
-        paint: {
-          // Визуально ближе к прежней "пилюле": светлая подложка + зелёная обводка.
-          'circle-color': '#ffffff',
-          'circle-radius': 22,
-          'circle-stroke-color': '#2ecc71',
-          'circle-stroke-width': 2,
-          'circle-blur': 0,
-        },
-      });
-
-      map.addLayer({
-        id: UNCLUSTERED_COUNT_LAYER_ID,
-        type: 'symbol',
-        source: CLUSTER_SOURCE_ID,
-        minzoom: CLUSTER_MARKER_ZOOM,
-        filter: ['!', ['has', 'point_count']],
-        layout: {
-          'text-field': ['get', 'markerLabel'],
-          'text-font': ['Open Sans Bold'],
-          'text-size': 13,
-        },
-        paint: {
-          'text-color': '#1a1c1a',
-          'text-halo-color': '#ffffff',
-          'text-halo-width': 1.5,
-        },
-      });
+      addMarkerLayers(map);
 
       map.on('click', CLUSTER_CIRCLES_LAYER_ID, zoomIntoCluster);
       map.on('click', UNCLUSTERED_POINTS_LAYER_ID, zoomIntoSingleClusterPoint);
@@ -338,6 +191,7 @@ export default function App() {
       try {
         const data = await loadPlaces();
         setPlaces(data);
+        ensureMarkerAssets(map, data);
         updateClusterSource(map, data);
         
         if (data.length === 0) {
@@ -392,6 +246,7 @@ export default function App() {
     if (!map || !map.getSource(CLUSTER_SOURCE_ID)) {
       return;
     }
+    ensureMarkerAssets(map, visiblePlaces);
     updateClusterSource(map, visiblePlaces);
     // Зависим от mapMode, а не currentZoom, чтобы не пересобирать DOM-маркеры
     // на каждом кадре анимации зума — только при фактическом переключении режима.
@@ -399,12 +254,6 @@ export default function App() {
 
   function closeAllPopups() {
     setSelectedPlaceId(null);
-  }
-
-  function rebuildMarkers(map: maplibregl.Map, visible: Place[], activePlaceId: string | null) {
-    void map;
-    void activePlaceId;
-    updateClusterSource(map, visible);
   }
 
   // ── Keyboard ───────────────────────────────────────────────────────────────
