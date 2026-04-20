@@ -1,98 +1,116 @@
+import { useEffect, useMemo, useState } from 'react';
+
 import { getFirstEmoji } from '../lib/categories';
-import { formatRuNum, isFullPriceRange } from '../lib/filters';
+import { formatRuNum } from '../lib/filters';
 import type { Place } from '../types';
 
 interface Props {
   places: Place[];
-  visibleCount: number;
-  totalCount: number;
-  priceMin: number;
-  priceMax: number;
   onSelectPlace: (place: Place) => void;
   onClose: () => void;
 }
 
-function formatTimestamp(timestamp: number): string {
-  return new Intl.DateTimeFormat('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(timestamp));
+const PAGE_SIZE = 6;
+
+/** Как на макете: 04/20, 21:17 */
+function formatRecentStamp(timestamp: number): string {
+  const d = new Date(timestamp);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  return `${dd}/${mm}, ${hh}:${min}`;
 }
 
-export default function RecentRegistrationsPanel({
-  places,
-  visibleCount,
-  totalCount,
-  priceMin,
-  priceMax,
-  onSelectPlace,
-  onClose,
-}: Props) {
-  const recentPlaces = [...places].sort((a, b) => b.createdAt - a.createdAt).slice(0, 3);
+export default function RecentRegistrationsPanel({ places, onSelectPlace, onClose }: Props) {
+  const [page, setPage] = useState(0);
 
-  const priceLabel = isFullPriceRange(priceMin, priceMax)
-    ? 'Любой чек'
-    : `${formatRuNum(priceMin)} - ${formatRuNum(priceMax)} BYN`;
+  const sortedByRecent = useMemo(
+    () => [...places].sort((a, b) => b.createdAt - a.createdAt),
+    [places],
+  );
+
+  const totalPages = Math.max(1, Math.ceil(sortedByRecent.length / PAGE_SIZE));
+  const pageStart = page * PAGE_SIZE;
+  const pagePlaces = sortedByRecent.slice(pageStart, pageStart + PAGE_SIZE);
+
+  useEffect(() => {
+    setPage((p) => Math.min(p, totalPages - 1));
+  }, [totalPages]);
 
   return (
     <section className="map-overlay-sheet map-recent-registrations-card" aria-label="Свежие добавления">
-      <div className="map-overlay-sheet-head">
-        <div>
-          <p className="map-overlay-kicker">Свежие добавления</p>
-          <h2 className="map-overlay-title">Что недавно появилось</h2>
+      <header className="map-recent-sheet-head">
+        <div className="map-recent-sheet-head-text">
+          <h2 className="map-recent-panel-title">Свежие добавления</h2>
+          <p className="map-recent-panel-sub">Пожалуйста, дайте строгий отзыв.</p>
         </div>
-        <div className="map-overlay-actions">
-          <span className="map-overlay-badge">
-            {visibleCount}/{totalCount}
-          </span>
-          <button
-            type="button"
-            className="map-overlay-close"
-            aria-label="Скрыть панель свежих добавлений"
-            onClick={onClose}
-          >
-            ×
-          </button>
-        </div>
-      </div>
+        <button
+          type="button"
+          className="map-recent-sheet-close"
+          aria-label="Скрыть панель свежих добавлений"
+          onClick={onClose}
+        >
+          ×
+        </button>
+      </header>
 
-      <p className="map-overlay-lead">
-        Живая подборка мест. Нажмите на карточку, чтобы центрировать карту и открыть детали.
-      </p>
-
-      <div className="map-overlay-filter-pill">
-        <span className="map-overlay-filter-label">Текущий лимит</span>
-        <strong>{priceLabel}</strong>
-      </div>
-
-      <div className="map-recent-list" role="list">
-        {recentPlaces.length > 0 ? (
-          recentPlaces.map((place, index) => (
-            <button key={place.id} type="button" className="map-recent-item" onClick={() => onSelectPlace(place)}>
-              <span className="map-recent-index">#{index + 1}</span>
-              <div className="map-recent-content">
-                <div className="map-recent-title-row">
-                  <span className="map-recent-emoji">{getFirstEmoji(place.categories)}</span>
-                  <span className="map-recent-name">{place.name || 'Без названия'}</span>
-                </div>
-                <span className="map-recent-address">{place.address || 'Адрес не указан'}</span>
-                <div className="map-recent-meta">
-                  <span className="map-recent-price">
-                    {place.price > 0 ? formatRuNum(place.price) : 'Чек не указан'}
+      <div className="map-recent-card-list" role="list">
+        {pagePlaces.length > 0 ? (
+          pagePlaces.map((place, index) => (
+            <button
+              key={place.id}
+              type="button"
+              className="map-recent-card"
+              onClick={() => onSelectPlace(place)}
+            >
+              <span className="map-recent-card-rank">#{pageStart + index + 1}</span>
+              <div className="map-recent-card-main">
+                <div className="map-recent-card-name-row">
+                  <span className="map-recent-card-emoji">{getFirstEmoji(place.categories)}</span>
+                  <span className="map-recent-card-name">{place.name || 'Без названия'}</span>
+                  <span className="map-recent-card-price">
+                    {place.price > 0 ? formatRuNum(place.price) : '—'}
                   </span>
-                  <span>{formatTimestamp(place.createdAt)}</span>
                 </div>
+                <span className="map-recent-card-address">{place.address || 'Адрес не указан'}</span>
+              </div>
+              <div className="map-recent-card-aside">
+                <span className="map-recent-card-added">Добавлено</span>
+                <span className="map-recent-card-datetime">{formatRecentStamp(place.createdAt)}</span>
               </div>
             </button>
           ))
         ) : (
-          <div className="map-recent-empty">
-            Пока нет ни одной точки. Добавь первое место и панель начнет заполняться сама.
+          <div className="map-recent-card-empty" role="status">
+            Пока нет ни одной точки. Добавь первое место — список заполнится сам.
           </div>
         )}
       </div>
+
+      {sortedByRecent.length > 0 && totalPages > 1 && (
+        <div className="map-recent-card-pagination">
+          <button
+            type="button"
+            className="map-recent-card-pagination-btn"
+            aria-label="Предыдущая страница"
+            disabled={page === 0}
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+          >
+            ‹
+          </button>
+          <span className="map-recent-card-pagination-label">{page + 1} стр.</span>
+          <button
+            type="button"
+            className="map-recent-card-pagination-btn"
+            aria-label="Следующая страница"
+            disabled={page >= totalPages - 1}
+            onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+          >
+            ›
+          </button>
+        </div>
+      )}
     </section>
   );
 }

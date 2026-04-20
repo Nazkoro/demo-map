@@ -508,10 +508,6 @@ export default function App() {
           {recentPanelOpen ? (
             <RecentRegistrationsPanel
               places={places}
-              visibleCount={visiblePlaces.length}
-              totalCount={places.length}
-              priceMin={priceMin}
-              priceMax={priceMax}
               onSelectPlace={focusPlaceOnMap}
               onClose={() => setRecentPanelOpen(false)}
             />
