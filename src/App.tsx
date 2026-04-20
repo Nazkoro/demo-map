@@ -32,6 +32,8 @@ const CLUSTER_SOURCE_ID = 'places-clusters';
 const CLUSTER_CIRCLES_LAYER_ID = 'places-cluster-circles';
 const CLUSTER_COUNT_LAYER_ID = 'places-cluster-count';
 const UNCLUSTERED_POINTS_LAYER_ID = 'places-unclustered-points';
+// Текст "1" для одиночной точки в кластерном режиме.
+const UNCLUSTERED_COUNT_LAYER_ID = 'places-unclustered-count';
 const CLUSTER_MARKER_ZOOM = 10;
 
 interface Toast {
@@ -176,6 +178,18 @@ export default function App() {
       map.easeTo({ center: [lng, lat], zoom: Math.min(targetZoom, 18), duration: 250 });
     };
 
+    // Одиночная точка ведёт себя как "кластер из 1": клик переводит к маркерам.
+    const zoomIntoSingleClusterPoint = (e: maplibregl.MapLayerMouseEvent) => {
+      const feature = e.features?.[0];
+      const geometry = feature?.geometry;
+      if (!geometry || geometry.type !== 'Point') {
+        return;
+      }
+
+      const [lng, lat] = geometry.coordinates as [number, number];
+      map.easeTo({ center: [lng, lat], zoom: CLUSTER_MARKER_ZOOM, duration: 250 });
+    };
+
     const setClusterCursor = () => {
       map.getCanvas().style.cursor = 'pointer';
     };
@@ -236,16 +250,38 @@ export default function App() {
         maxzoom: CLUSTER_MARKER_ZOOM,
         filter: ['!', ['has', 'point_count']],
         paint: {
-          'circle-color': '#1f2430',
-          'circle-radius': 5,
-          'circle-stroke-color': '#ffffff',
+          // Единый визуал с кластерами, чтобы "1" не выглядела чёрной точкой.
+          'circle-color': '#b8d3ff',
+          'circle-radius': 16,
+          'circle-stroke-color': '#6f9df2',
           'circle-stroke-width': 2,
         },
       });
 
+      map.addLayer({
+        id: UNCLUSTERED_COUNT_LAYER_ID,
+        type: 'symbol',
+        source: CLUSTER_SOURCE_ID,
+        maxzoom: CLUSTER_MARKER_ZOOM,
+        filter: ['!', ['has', 'point_count']],
+        layout: {
+          'text-field': '1',
+          'text-font': ['Open Sans Bold'],
+          'text-size': 14,
+        },
+        paint: {
+          'text-color': '#2558ab',
+          'text-halo-color': '#e9f1ff',
+          'text-halo-width': 1,
+        },
+      });
+
       map.on('click', CLUSTER_CIRCLES_LAYER_ID, zoomIntoCluster);
+      map.on('click', UNCLUSTERED_POINTS_LAYER_ID, zoomIntoSingleClusterPoint);
       map.on('mouseenter', CLUSTER_CIRCLES_LAYER_ID, setClusterCursor);
+      map.on('mouseenter', UNCLUSTERED_POINTS_LAYER_ID, setClusterCursor);
       map.on('mouseleave', CLUSTER_CIRCLES_LAYER_ID, resetClusterCursor);
+      map.on('mouseleave', UNCLUSTERED_POINTS_LAYER_ID, resetClusterCursor);
 
       syncZoom();
       if (!supabase) {
@@ -275,8 +311,11 @@ export default function App() {
 
     return () => {
       map.off('click', CLUSTER_CIRCLES_LAYER_ID, zoomIntoCluster);
+      map.off('click', UNCLUSTERED_POINTS_LAYER_ID, zoomIntoSingleClusterPoint);
       map.off('mouseenter', CLUSTER_CIRCLES_LAYER_ID, setClusterCursor);
+      map.off('mouseenter', UNCLUSTERED_POINTS_LAYER_ID, setClusterCursor);
       map.off('mouseleave', CLUSTER_CIRCLES_LAYER_ID, resetClusterCursor);
+      map.off('mouseleave', UNCLUSTERED_POINTS_LAYER_ID, resetClusterCursor);
       map.off('zoom', syncZoom);
       map.remove();
       mapRef.current = null;
@@ -290,6 +329,7 @@ export default function App() {
     [places, priceMin, priceMax, selectedCategories, nameQuery, focusBypassId],
   );
 
+  // Строгая граница: <10 кластеры, >=10 маркеры.
   const mapMode: 'cluster' | 'markers' = isClusterZoom(currentZoom) ? 'cluster' : 'markers';
 
   useEffect(() => {
