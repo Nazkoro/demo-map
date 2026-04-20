@@ -10,10 +10,31 @@ export const UNCLUSTERED_POINTS_LAYER_ID = 'places-unclustered-points';
 export const UNCLUSTERED_COUNT_LAYER_ID = 'places-unclustered-count';
 export const UNCLUSTERED_LOW_POINTS_LAYER_ID = 'places-unclustered-low-points';
 export const UNCLUSTERED_LOW_COUNT_LAYER_ID = 'places-unclustered-low-count';
-export const UNCLUSTERED_BG_LAYER_ID = 'places-unclustered-bg';
 export const CLUSTER_MARKER_ZOOM = 10;
 
-const MARKER_BG_IMAGE_ID = 'places-marker-bg-rect';
+// function hashStringToUnit(value: string): number {
+//   let hash = 2166136261;
+//   for (let i = 0; i < value.length; i += 1) {
+//     hash ^= value.charCodeAt(i);
+//     hash = Math.imul(hash, 16777619);
+//   }
+//   return (hash >>> 0) / 4294967295;
+// }
+//
+// function getMarkerSortKey(place: Place): number {
+//   // Основной порядок — по широте (визуально ниже на экране обычно выше по приоритету),
+//   // tie-breaker — стабильный хеш id, чтобы при одинаковых координатах порядок не "мигал"
+//   // и совпадал для слоя фона и слоя контента.
+//   return place.lat * 1_000_000 + hashStringToUnit(String(place.id));
+// }
+
+function getMarkerSortKey(place: Place): number {
+  // При icon-allow-overlap=true более высокий sort-key оказывается визуально выше.
+  // Поэтому используем отрицательную цену: чем цена ниже, тем выше маркер.
+  // Пустую цену отправляем вниз.
+  const price = typeof place.price === 'number' ? place.price : Number.POSITIVE_INFINITY;
+  return -price;
+}
 
 export function isClusterZoom(zoom: number): boolean {
   return zoom < CLUSTER_MARKER_ZOOM;
@@ -29,8 +50,8 @@ function buildClusterGeoJson(places: Place[]) {
         properties: {
           id: place.id,
           markerLabel: place.price ? place.price.toLocaleString('ru-RU') : '',
-          markerEmoji: emoji,
-          markerEmojiIconId: `emoji-${encodeURIComponent(emoji)}`,
+          markerCardImageId: `marker-card-${encodeURIComponent(`${emoji}|${place.price ?? ''}`)}`,
+          markerSort: getMarkerSortKey(place),
         },
         geometry: {
           type: 'Point' as const,
@@ -46,7 +67,7 @@ export function updateClusterSource(map: maplibregl.Map, places: Place[]) {
   source?.setData(buildClusterGeoJson(places));
 }
 
-function createMarkerBgImage(): ImageData {
+function createMarkerCardImage(emoji: string, label: string): ImageData {
   const logicalWidth = 54;
   const logicalHeight = 20;
   const dpr = 2;
@@ -85,51 +106,45 @@ function createMarkerBgImage(): ImageData {
   ctx.shadowOffsetX = 0;
   ctx.shadowOffsetY = 1;
   drawRoundedRect();
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+  ctx.fillStyle = '#ffffff';
   ctx.fill();
   ctx.restore();
 
   drawRoundedRect();
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+  ctx.fillStyle = '#ffffff';
   ctx.fill();
   ctx.lineWidth = 1;
   ctx.strokeStyle = 'rgba(34, 197, 94, 1)';
   ctx.stroke();
 
-  return ctx.getImageData(0, 0, width, height);
-}
-
-function addEmojiImage(map: maplibregl.Map, emoji: string) {
-  const imageId = `emoji-${encodeURIComponent(emoji)}`;
-  if (map.hasImage(imageId)) {
-    return;
-  }
-
-  const size = 26;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) {
-    return;
-  }
-
-  ctx.clearRect(0, 0, size, size);
   ctx.font = '20px "Segoe UI Emoji", "Noto Color Emoji", "Apple Color Emoji", sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(emoji, size / 2, size / 2 + 1);
-  map.addImage(imageId, ctx.getImageData(0, 0, size, size), { pixelRatio: 2 });
+  ctx.fillText(emoji, 11, logicalHeight / 2 + 1);
+
+  ctx.font = '700 12px "Open Sans", "Segoe UI", sans-serif';
+  ctx.fillStyle = 'rgb(15, 23, 42)';
+  ctx.fillText(label, 35, logicalHeight / 2 + 0.5);
+
+  return ctx.getImageData(0, 0, width, height);
 }
 
 export function ensureMarkerAssets(map: maplibregl.Map, places: Place[]) {
-  if (!map.hasImage(MARKER_BG_IMAGE_ID)) {
-    map.addImage(MARKER_BG_IMAGE_ID, createMarkerBgImage(), { pixelRatio: 2 });
-  }
+  const unique = new Map<string, { emoji: string; label: string }>();
+  places.forEach((place) => {
+    const emoji = getFirstEmoji(place.categories);
+    const label = place.price ? place.price.toLocaleString('ru-RU') : '';
+    const imageId = `marker-card-${encodeURIComponent(`${emoji}|${place.price ?? ''}`)}`;
+    if (!unique.has(imageId)) {
+      unique.set(imageId, { emoji, label });
+    }
+  });
 
-  const unique = new Set<string>();
-  places.forEach((place) => unique.add(getFirstEmoji(place.categories)));
-  unique.forEach((emoji) => addEmojiImage(map, emoji));
+  unique.forEach(({ emoji, label }, imageId) => {
+    if (!map.hasImage(imageId)) {
+      map.addImage(imageId, createMarkerCardImage(emoji, label), { pixelRatio: 2 });
+    }
+  });
 }
 
 export function addMarkerLayers(map: maplibregl.Map) {
@@ -221,44 +236,17 @@ export function addMarkerLayers(map: maplibregl.Map) {
   });
 
   map.addLayer({
-    id: UNCLUSTERED_BG_LAYER_ID,
-    type: 'symbol',
-    source: CLUSTER_SOURCE_ID,
-    minzoom: CLUSTER_MARKER_ZOOM,
-    filter: ['!', ['has', 'point_count']],
-    layout: {
-      'icon-image': MARKER_BG_IMAGE_ID,
-      'icon-size': ['interpolate', ['linear'], ['zoom'], CLUSTER_MARKER_ZOOM, 1, 18, 1.06],
-      'icon-allow-overlap': true,
-      'icon-ignore-placement': true,
-    },
-  });
-
-  map.addLayer({
     id: UNCLUSTERED_COUNT_LAYER_ID,
     type: 'symbol',
     source: CLUSTER_SOURCE_ID,
     minzoom: CLUSTER_MARKER_ZOOM,
     filter: ['!', ['has', 'point_count']],
     layout: {
-      'text-field': ['get', 'markerLabel'],
-      'text-font': ['Open Sans Bold'],
-      'text-size': ['interpolate', ['linear'], ['zoom'], CLUSTER_MARKER_ZOOM, 11.8, 18, 12.8],
-      'icon-image': ['get', 'markerEmojiIconId'],
-      'icon-size': ['interpolate', ['linear'], ['zoom'], CLUSTER_MARKER_ZOOM, 1.02, 18, 1.1],
-      'icon-anchor': 'center',
-      'icon-offset': [-10.5, 0],
-      'text-anchor': 'center',
-      'text-offset': [0.62, 0],
+      'icon-image': ['get', 'markerCardImageId'],
+      'icon-size': ['interpolate', ['linear'], ['zoom'], CLUSTER_MARKER_ZOOM, 1, 18, 1.06],
+      'symbol-sort-key': ['get', 'markerSort'],
       'icon-allow-overlap': true,
-      'text-allow-overlap': true,
       'icon-ignore-placement': true,
-      'text-ignore-placement': true,
-    },
-    paint: {
-      'text-color': 'rgb(15, 23, 42)',
-      'text-halo-color': '#ffffff',
-      'text-halo-width': 1.1,
     },
   });
 }
