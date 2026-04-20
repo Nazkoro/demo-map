@@ -5,13 +5,16 @@ export interface Category {
 }
 
 export const CATEGORIES: Category[] = [
-  { id: 'korean', emoji: '🥘', label: '🥘 Корейская' },
-  { id: 'buffet', emoji: '🍱', label: '🍱 Шведский стол' },
+  { id: 'belarusian', emoji: '🥔', label: '🥔 Белорусская' },
   { id: 'chinese', emoji: '🥢', label: '🥢 Китайская' },
+  { id: 'georgian', emoji: '🍷', label: '🍷 Грузинская' },
   { id: 'japanese', emoji: '🍣', label: '🍣 Японская' },
+  { id: 'european', emoji: '🍽️', label: '🍽️ Европейская' },
+  { id: 'pizza', emoji: '🍕', label: '🍕 Пицца' },
+  { id: 'buffet', emoji: '🍱', label: '🍱 Шведский стол' },
   { id: 'burgers', emoji: '🍔', label: '🍔 Бургеры' },
   { id: 'salads', emoji: '🥗', label: '🥗 Салаты' },
-  { id: 'pizza', emoji: '🍕', label: '🍕 Пицца' },
+  { id: 'bakery', emoji: '🥐', label: '🥐 Пекарня' },
   { id: 'cafe', emoji: '☕', label: '☕ Кафе' },
   { id: 'shawarma', emoji: '🌯', label: '🌯 Шаурма' },
 ];

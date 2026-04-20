@@ -57,8 +57,20 @@ export default function AddPlaceModal({ open, onClose, onSubmit }: Props) {
       alert('Укажите адрес заведения');
       return;
     }
+    if (!dish.trim()) {
+      alert('Укажите название блюда');
+      return;
+    }
+    if (priceRaw.trim() === '') {
+      alert('Укажите цену блюда');
+      return;
+    }
     const price = priceRaw === '' ? 0 : Math.max(0, parseFloat(priceRaw) || 0);
-    onSubmit({ name: name.trim(), price, categories: cats, dish, hours, address: address.trim(), note });
+    if (price <= 0) {
+      alert('Цена должна быть больше 0');
+      return;
+    }
+    onSubmit({ name: name.trim(), price, categories: cats, dish: dish.trim(), hours, address: address.trim(), note });
   }
 
   return (
@@ -126,17 +138,18 @@ export default function AddPlaceModal({ open, onClose, onSubmit }: Props) {
           {/* Dish + Price */}
           <div className="am-grid2">
             <div className="am-field">
-              <label className="am-label">Название блюда</label>
+              <label className="am-label">Название блюда *</label>
               <input
                 className="am-input"
                 type="text"
                 placeholder="например, Острый суп"
                 value={dish}
                 onChange={(e) => setDish(e.target.value)}
+                required
               />
             </div>
             <div className="am-field">
-              <label className="am-label">Цена (BYN)</label>
+              <label className="am-label">Цена (BYN) *</label>
               <input
                 className="am-input"
                 type="number"
@@ -145,6 +158,7 @@ export default function AddPlaceModal({ open, onClose, onSubmit }: Props) {
                 placeholder="0"
                 value={priceRaw}
                 onChange={(e) => setPriceRaw(e.target.value)}
+                required
               />
             </div>
           </div>
