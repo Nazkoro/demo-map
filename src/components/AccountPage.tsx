@@ -5,24 +5,19 @@ import { supabase } from '../lib/supabase';
 
 type AuthMode = 'home' | 'signin' | 'signup';
 
-function normalizeEmailFromLogin(login: string): string {
-  const safe = login.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
-  return `${safe}@kartanishchego.local`;
-}
-
 export default function AccountPage() {
   const navigate = useNavigate();
   const [mode, setMode] = useState<AuthMode>('home');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string>('');
+  const [currentEmail, setCurrentEmail] = useState<string | null>(null);
 
-  const [signinLogin, setSigninLogin] = useState('');
+  const [signinEmail, setSigninEmail] = useState('');
   const [signinPassword, setSigninPassword] = useState('');
 
-  const [signupLogin, setSignupLogin] = useState('');
+  const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
   const [signupPasswordConfirm, setSignupPasswordConfirm] = useState('');
-  const [signupNickname, setSignupNickname] = useState('');
 
   const languageItems = useMemo(() => ['Русский', 'English', '日本語', '繁體中文'], []);
 
@@ -40,6 +35,20 @@ export default function AccountPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!supabase) {
+      setCurrentEmail(null);
+      return;
+    }
+    supabase.auth.getSession().then(({ data }) => {
+      setCurrentEmail(data.session?.user.email ?? null);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setCurrentEmail(session?.user.email ?? null);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
     setMsg('');
@@ -48,14 +57,13 @@ export default function AccountPage() {
       return;
     }
 
-    const login = signinLogin.trim();
-    if (!login || signinPassword.length < 6) {
-      setMsg('Введите логин и пароль (минимум 6 символов)');
+    const email = signinEmail.trim();
+    if (!email || signinPassword.length < 6) {
+      setMsg('Введите email и пароль (минимум 6 символов)');
       return;
     }
 
     setBusy(true);
-    const email = normalizeEmailFromLogin(login);
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password: signinPassword,
@@ -78,10 +86,9 @@ export default function AccountPage() {
       return;
     }
 
-    const login = signupLogin.trim();
-    const nickname = signupNickname.trim();
-    if (!login || !nickname) {
-      setMsg('Заполните логин и никнейм');
+    const email = signupEmail.trim();
+    if (!email) {
+      setMsg('Введите email');
       return;
     }
     if (signupPassword.length < 6) {
@@ -94,13 +101,9 @@ export default function AccountPage() {
     }
 
     setBusy(true);
-    const email = normalizeEmailFromLogin(login);
     const { error } = await supabase.auth.signUp({
       email,
       password: signupPassword,
-      options: {
-        data: { nickname, login },
-      },
     });
     setBusy(false);
 
@@ -109,10 +112,25 @@ export default function AccountPage() {
       return;
     }
 
-    setMsg('Аккаунт создан. Теперь войдите в систему.');
+    setMsg('Аккаунт создан. Проверьте почту для подтверждения, затем войдите.');
     setMode('signin');
-    setSigninLogin(login);
+    setSigninEmail(email);
     setSigninPassword('');
+  }
+
+  async function handleSignOut() {
+    if (!supabase) {
+      return;
+    }
+    setBusy(true);
+    const { error } = await supabase.auth.signOut();
+    setBusy(false);
+    if (error) {
+      setMsg(error.message);
+      return;
+    }
+    setMsg('Вы вышли из аккаунта');
+    setMode('home');
   }
 
   return (
@@ -124,21 +142,34 @@ export default function AccountPage() {
         <section className="account-card">
           {mode === 'home' && (
             <>
-              <button type="button" className="account-row account-row--head">
+              <div className="account-row account-row--head">
                 <span className="account-row-icon">◎</span>
                 <span className="account-row-main">
                   <strong>Account</strong>
-                  <small>Sign in to manage your nickname, password and activity.</small>
+                  <small>
+                    {currentEmail
+                      ? `Вы вошли как ${currentEmail}`
+                      : 'Sign in to manage your nickname, password and activity.'}
+                  </small>
                 </span>
-              </button>
-              <button type="button" className="account-row" onClick={() => setMode('signin')}>
-                <span className="account-row-icon">◌</span>
-                <span>Sign in</span>
-              </button>
-              <button type="button" className="account-row" onClick={() => setMode('signup')}>
-                <span className="account-row-icon">◌</span>
-                <span>Sign up</span>
-              </button>
+              </div>
+              {currentEmail ? (
+                <button type="button" className="account-row" onClick={handleSignOut} disabled={busy}>
+                  <span className="account-row-icon">◌</span>
+                  <span>{busy ? 'Signing out...' : 'Sign out'}</span>
+                </button>
+              ) : (
+                <>
+                  <button type="button" className="account-row" onClick={() => setMode('signin')}>
+                    <span className="account-row-icon">◌</span>
+                    <span>Sign in</span>
+                  </button>
+                  <button type="button" className="account-row" onClick={() => setMode('signup')}>
+                    <span className="account-row-icon">◌</span>
+                    <span>Sign up</span>
+                  </button>
+                </>
+              )}
             </>
           )}
 
@@ -152,8 +183,13 @@ export default function AccountPage() {
               </div>
               <h2>Sign in</h2>
               <label>
-                Login ID
-                <input value={signinLogin} onChange={(e) => setSigninLogin(e.target.value)} placeholder="Login ID" />
+                Email
+                <input
+                  type="email"
+                  value={signinEmail}
+                  onChange={(e) => setSigninEmail(e.target.value)}
+                  placeholder="you@example.com"
+                />
               </label>
               <label>
                 Password
@@ -183,8 +219,13 @@ export default function AccountPage() {
               </div>
               <h2>Sign up</h2>
               <label>
-                Login ID
-                <input value={signupLogin} onChange={(e) => setSignupLogin(e.target.value)} placeholder="Login ID" />
+                Email
+                <input
+                  type="email"
+                  value={signupEmail}
+                  onChange={(e) => setSignupEmail(e.target.value)}
+                  placeholder="you@example.com"
+                />
               </label>
               <label>
                 Password
@@ -202,14 +243,6 @@ export default function AccountPage() {
                   value={signupPasswordConfirm}
                   onChange={(e) => setSignupPasswordConfirm(e.target.value)}
                   placeholder="Re-enter your password"
-                />
-              </label>
-              <label>
-                Nickname
-                <input
-                  value={signupNickname}
-                  onChange={(e) => setSignupNickname(e.target.value)}
-                  placeholder="Nickname shown in posts"
                 />
               </label>
               <button className="account-btn account-btn--primary" type="submit" disabled={busy}>
