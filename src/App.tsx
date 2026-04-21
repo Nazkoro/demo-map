@@ -34,8 +34,7 @@ import SearchModal from './components/SearchModal';
 import PlaceSheet from './components/PlaceSheet';
 import RecentRegistrationsPanel from './components/RecentRegistrationsPanel';
 import MapSidebar from './components/MapSidebar';
-
-const MAP_STYLE = 'https://tiles.versatiles.org/assets/styles/colorful/style.json';
+import { getVersatilesLightStyle } from './lib/versatilesLightStyle';
 const MAP_CENTER: [number, number] = [27.5618, 53.9023];
 const MAP_ZOOM = 12;
 
@@ -100,7 +99,7 @@ export default function App() {
 
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
-      style: MAP_STYLE,
+      style: getVersatilesLightStyle(),
       center: MAP_CENTER,
       zoom: MAP_ZOOM,
       renderWorldCopies: false,
