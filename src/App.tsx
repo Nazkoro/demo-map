@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import maplibregl from 'maplibre-gl';
+import { NavLink } from 'react-router-dom';
 
 import type { Place, PlaceFormData } from './types';
 import { loadPlaces, insertPlace, updateVotes, removePlace } from './lib/places';
@@ -473,6 +474,11 @@ export default function App() {
               Подборка ресторанов с наилучшим соотношением цены и качества в эпоху высоких цен.
             </p>
           </div>
+          <div className="map-app-header__actions">
+            <button type="button" className={`map-header-add-btn${isAddingMode ? ' is-active' : ''}`} onClick={enableAddMode}>
+              {isAddingMode ? 'Отменить выбор точки' : 'Добавить новое место'}
+            </button>
+          </div>
         </header>
 
         <div className="map-left-rail">
@@ -481,10 +487,6 @@ export default function App() {
 
         <div className="map-pc-right-rail">
           <div className="map-right-controls">
-            <div className="map-zoom-pill" role="status" aria-label={`Текущий масштаб: ${currentZoom.toFixed(1)}`}>
-              <span className="map-zoom-pill__label">Zoom</span>
-              <span className="map-zoom-pill__value">{currentZoom.toFixed(1)}</span>
-            </div>
             <FabStack
               chip={searchChip}
               onOpenPriceFilter={() => setModalPrice(true)}
@@ -517,11 +519,6 @@ export default function App() {
           )}
         </div>
 
-        <div className="controls">
-          <button type="button" className={`btn${isAddingMode ? ' btn-primary' : ''}`} onClick={enableAddMode}>
-            {isAddingMode ? 'Отменить выбор точки' : 'Добавить новое место'}
-          </button>
-        </div>
       </div>
 
       {isAddingMode && (
@@ -565,6 +562,26 @@ export default function App() {
       />
 
       <PlaceSheet place={selectedPlace} onClose={closeAllPopups} onVote={handleVote} onDelete={handleDelete} />
+
+      <nav className="map-bottom-nav" aria-label="Основная навигация">
+        <NavLink to="/" end className={({ isActive }) => `map-bottom-nav__item${isActive ? ' is-active' : ''}`}>
+          <span className="map-bottom-nav__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M4.5 6.5 9 4l6 2.5 4.5-2v13L15 20l-6-2.5-4.5 2z" />
+              <path d="M9 4v13.5M15 6.5V20" />
+            </svg>
+          </span>
+        </NavLink>
+        <NavLink to="/account" className={({ isActive }) => `map-bottom-nav__item${isActive ? ' is-active' : ''}`}>
+          <span className="map-bottom-nav__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M4 8h16M4 16h16" />
+              <circle cx="9" cy="8" r="2" />
+              <circle cx="15" cy="16" r="2" />
+            </svg>
+          </span>
+        </NavLink>
+      </nav>
     </div>
   );
 }
