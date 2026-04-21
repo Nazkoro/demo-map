@@ -1,8 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { PlaceFormData } from '../types';
 import { CATEGORIES } from '../lib/categories';
 
 const MAX_CATS = 3;
+const MAX_IMAGES = 5;
+const MAX_IMAGE_SIZE_MB = 3;
+const MAX_IMAGE_SIZE_BYTES = MAX_IMAGE_SIZE_MB * 1024 * 1024;
+const MAX_IMAGE_DIMENSION = 1920;
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 interface Props {
   open: boolean;
@@ -11,6 +16,8 @@ interface Props {
 }
 
 export default function AddPlaceModal({ open, onClose, onSubmit }: Props) {
+  const [images, setImages] = useState<File[]>([]);
+  const [isProcessingImages, setIsProcessingImages] = useState(false);
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   const [cats, setCats] = useState<string[]>([]);
@@ -18,9 +25,20 @@ export default function AddPlaceModal({ open, onClose, onSubmit }: Props) {
   const [priceRaw, setPriceRaw] = useState(''); // строка в инпуте
   const [hours, setHours] = useState('');
   const [note, setNote] = useState('');
+  const imagePreviews = useMemo(
+    () => images.map((file) => ({ file, url: URL.createObjectURL(file) })),
+    [images],
+  );
+
+  useEffect(() => {
+    return () => {
+      imagePreviews.forEach((entry) => URL.revokeObjectURL(entry.url));
+    };
+  }, [imagePreviews]);
 
   useEffect(() => {
     if (open) {
+      setImages([]);
       setName('');
       setAddress('');
       setCats([]);
@@ -49,6 +67,18 @@ export default function AddPlaceModal({ open, onClose, onSubmit }: Props) {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (isProcessingImages) {
+      alert('Подождите, изображения еще обрабатываются');
+      return;
+    }
+    if (images.length < 1) {
+      alert('Добавьте минимум 1 фото');
+      return;
+    }
+    if (images.some((image) => image.size > MAX_IMAGE_SIZE_BYTES)) {
+      alert(`Каждое фото должно быть не больше ${MAX_IMAGE_SIZE_MB} МБ`);
+      return;
+    }
     if (!name.trim()) {
       alert('Укажите название заведения');
       return;
@@ -70,7 +100,111 @@ export default function AddPlaceModal({ open, onClose, onSubmit }: Props) {
       alert('Цена должна быть больше 0');
       return;
     }
-    onSubmit({ name: name.trim(), price, categories: cats, dish: dish.trim(), hours, address: address.trim(), note });
+    onSubmit({ name: name.trim(), price, categories: cats, dish: dish.trim(), hours, address: address.trim(), note, images });
+  }
+
+  async function fileToImage(file: File): Promise<HTMLImageElement> {
+    const src = URL.createObjectURL(file);
+    try {
+      const image = new Image();
+      await new Promise<void>((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = () => reject(new Error('Не удалось открыть изображение'));
+        image.src = src;
+      });
+      return image;
+    } finally {
+      URL.revokeObjectURL(src);
+    }
+  }
+
+  function canvasToBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob | null> {
+    return new Promise((resolve) => {
+      canvas.toBlob((blob) => resolve(blob), 'image/jpeg', quality);
+    });
+  }
+
+  async function compressImage(file: File): Promise<File> {
+    if (file.size <= MAX_IMAGE_SIZE_BYTES) {
+      return file;
+    }
+
+    const image = await fileToImage(file);
+    const ratio = Math.min(1, MAX_IMAGE_DIMENSION / Math.max(image.width, image.height));
+    const width = Math.max(1, Math.round(image.width * ratio));
+    const height = Math.max(1, Math.round(image.height * ratio));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      throw new Error('Браузер не поддерживает обработку изображений');
+    }
+    ctx.drawImage(image, 0, 0, width, height);
+
+    const qualities = [0.85, 0.75, 0.65, 0.55, 0.45, 0.35];
+    for (const quality of qualities) {
+      const blob = await canvasToBlob(canvas, quality);
+      if (!blob) {
+        continue;
+      }
+      if (blob.size <= MAX_IMAGE_SIZE_BYTES) {
+        const compressedName = file.name.replace(/\.[^.]+$/, '') + '.jpg';
+        return new File([blob], compressedName, { type: 'image/jpeg', lastModified: Date.now() });
+      }
+    }
+
+    throw new Error(`Не удалось сжать файл до ${MAX_IMAGE_SIZE_MB} МБ`);
+  }
+
+  async function handleImagePick(e: React.ChangeEvent<HTMLInputElement>) {
+    const incoming = Array.from(e.target.files ?? []);
+    if (!incoming.length) {
+      return;
+    }
+
+    const freeSlots = Math.max(0, MAX_IMAGES - images.length);
+    if (!freeSlots) {
+      alert(`Можно загрузить максимум ${MAX_IMAGES} фото`);
+      e.target.value = '';
+      return;
+    }
+
+    const candidates = incoming.slice(0, freeSlots);
+    if (incoming.length > freeSlots) {
+      alert(`Можно загрузить максимум ${MAX_IMAGES} фото`);
+    }
+
+    setIsProcessingImages(true);
+    try {
+      const prepared: File[] = [];
+      for (const image of candidates) {
+        if (!ALLOWED_IMAGE_TYPES.includes(image.type)) {
+          alert(`Файл "${image.name}" пропущен: поддерживаются JPG, PNG и WEBP`);
+          continue;
+        }
+        try {
+          const compressed = await compressImage(image);
+          prepared.push(compressed);
+        } catch (error: unknown) {
+          alert(
+            `Файл "${image.name}" пропущен: ${
+              error instanceof Error ? error.message : 'ошибка обработки изображения'
+            }`,
+          );
+        }
+      }
+      if (prepared.length) {
+        setImages((prev) => [...prev, ...prepared]);
+      }
+    } finally {
+      setIsProcessingImages(false);
+    }
+    e.target.value = '';
+  }
+
+  function removeImage(index: number) {
+    setImages((prev) => prev.filter((_, i) => i !== index));
   }
 
   return (
@@ -194,12 +328,48 @@ export default function AddPlaceModal({ open, onClose, onSubmit }: Props) {
             />
           </div>
 
+          <div className="am-field">
+            <label className="am-label">Фото *</label>
+            <div className="am-image-box">
+              <p className="am-image-count">
+                Images {images.length}/{MAX_IMAGES} (min 1, max {MAX_IMAGE_SIZE_MB} MB each)
+              </p>
+              <div className="am-image-grid">
+                {imagePreviews.map((entry, index) => (
+                  <div className="am-image-item" key={`${entry.file.name}-${entry.file.lastModified}-${index}`}>
+                    <img className="am-image-thumb" src={entry.url} alt={`Фото ${index + 1}`} />
+                    <button
+                      type="button"
+                      className="am-image-remove"
+                      onClick={() => removeImage(index)}
+                      aria-label={`Удалить фото ${index + 1}`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                {images.length < MAX_IMAGES && (
+                  <label className={`am-image-upload${isProcessingImages ? ' am-image-upload--disabled' : ''}`}>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      multiple
+                      onChange={handleImagePick}
+                      disabled={isProcessingImages}
+                    />
+                    <span>{isProcessingImages ? '...' : '+'}</span>
+                  </label>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* Footer buttons */}
           <div className="am-footer">
             <button type="button" className="am-btn am-btn--cancel" onClick={onClose}>
               Отмена
             </button>
-            <button type="submit" className="am-btn am-btn--submit">
+            <button type="submit" className="am-btn am-btn--submit" disabled={isProcessingImages}>
               Сохранить
             </button>
           </div>

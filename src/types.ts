@@ -9,6 +9,7 @@ export interface Place {
   hours: string;
   address: string;
   note: string;
+  imageUrls: string[];
   votesUp: number;
   votesDown: number;
   createdAt: number;
@@ -22,4 +23,5 @@ export interface PlaceFormData {
   hours: string;
   address: string;
   note: string;
+  images: File[];
 }

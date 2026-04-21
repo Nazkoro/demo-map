@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import type { Place, PlaceFormData } from '../types';
 
 const TABLE = 'places';
+const IMAGES_BUCKET = 'place-images';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function mapDbRowToPlace(row: any): Place {
@@ -17,6 +18,7 @@ export function mapDbRowToPlace(row: any): Place {
     address: String(row.address ?? row.map_link ?? ''),
     // fall back to old "description" column for legacy rows
     note: String(row.note ?? row.description ?? ''),
+    imageUrls: Array.isArray(row.image_urls) ? row.image_urls.filter((url: unknown) => typeof url === 'string') : [],
     votesUp: Number(row.votes_up) || 0,
     votesDown: Number(row.votes_down) || 0,
     createdAt: new Date(String(row.created_at)).getTime(),
@@ -25,6 +27,40 @@ export function mapDbRowToPlace(row: any): Place {
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+async function uploadPlaceImages(placeId: string, images: File[]): Promise<{ urls: string[]; paths: string[] }> {
+  if (!supabase || images.length === 0) {
+    return { urls: [], paths: [] };
+  }
+
+  const urls: string[] = [];
+  const paths: string[] = [];
+
+  for (let index = 0; index < images.length; index += 1) {
+    const image = images[index];
+    const ext = image.name.split('.').pop()?.toLowerCase() || 'jpg';
+    const path = `${placeId}/${Date.now()}-${index}.${ext}`;
+    const { error: uploadError } = await supabase.storage.from(IMAGES_BUCKET).upload(path, image, {
+      upsert: false,
+      contentType: image.type || 'image/jpeg',
+    });
+    if (uploadError) {
+      throw uploadError;
+    }
+    const { data } = supabase.storage.from(IMAGES_BUCKET).getPublicUrl(path);
+    urls.push(data.publicUrl);
+    paths.push(path);
+  }
+
+  return { urls, paths };
+}
+
+async function deleteStoragePaths(paths: string[]): Promise<void> {
+  if (!supabase || paths.length === 0) {
+    return;
+  }
+  await supabase.storage.from(IMAGES_BUCKET).remove(paths);
 }
 
 export async function loadPlaces(): Promise<Place[]> {
@@ -43,8 +79,10 @@ export async function insertPlace(
   lat: number,
   form: PlaceFormData,
 ): Promise<{ place: Place; local: boolean }> {
+  const id = generateId();
+
   const base = {
-    id: generateId(),
+    id,
     lng,
     lat,
     name: form.name.trim(),
@@ -54,6 +92,7 @@ export async function insertPlace(
     hours: form.hours.trim(),
     address: form.address.trim(),
     note: form.note.trim(),
+    image_urls: [] as string[],
     votes_up: 0,
     votes_down: 0,
   };
@@ -61,6 +100,7 @@ export async function insertPlace(
   if (!supabase) {
     const place: Place = {
       ...base,
+      imageUrls: form.images.map((image) => URL.createObjectURL(image)),
       votesUp: 0,
       votesDown: 0,
       createdAt: Date.now(),
@@ -68,15 +108,23 @@ export async function insertPlace(
     return { place, local: true };
   }
 
-  const { data, error } = await supabase
-    .from(TABLE)
-    .insert({ ...base, created_at: new Date().toISOString() })
-    .select()
-    .single();
-  if (error) {
+  const { urls, paths } = await uploadPlaceImages(id, form.images);
+  base.image_urls = urls;
+
+  try {
+    const { data, error } = await supabase
+      .from(TABLE)
+      .insert({ ...base, created_at: new Date().toISOString() })
+      .select()
+      .single();
+    if (error) {
+      throw error;
+    }
+    return { place: mapDbRowToPlace(data), local: false };
+  } catch (error) {
+    await deleteStoragePaths(paths);
     throw error;
   }
-  return { place: mapDbRowToPlace(data), local: false };
 }
 
 export async function updateVotes(place: Place): Promise<void> {
@@ -96,6 +144,25 @@ export async function removePlace(id: string): Promise<void> {
   if (!supabase) {
     return;
   }
+  const { data: imageRows } = await supabase.from(TABLE).select('image_urls').eq('id', id).maybeSingle();
+
+  const { data: storageObjects } = await supabase.storage.from(IMAGES_BUCKET).list(id, {
+    limit: 100,
+    offset: 0,
+  });
+  const storagePaths = (storageObjects ?? []).map((item) => `${id}/${item.name}`);
+  const imageUrls = Array.isArray(imageRows?.image_urls) ? imageRows.image_urls : [];
+  const imagePathsFromUrls = imageUrls
+    .map((url: string) => {
+      const marker = `/storage/v1/object/public/${IMAGES_BUCKET}/`;
+      const index = url.indexOf(marker);
+      return index === -1 ? '' : url.slice(index + marker.length);
+    })
+    .filter(Boolean);
+
+  const allPaths = Array.from(new Set([...storagePaths, ...imagePathsFromUrls]));
+  await deleteStoragePaths(allPaths);
+
   const { error } = await supabase.from(TABLE).delete().eq('id', id);
   if (error) {
     throw error;

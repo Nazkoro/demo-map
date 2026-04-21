@@ -108,13 +108,33 @@ export default function PlaceSheet({ place, onClose, onVote, onDelete }: Props) 
 
         <div className="place-popup-scroll">
           <div className="place-popup-media-row">
-            <div className="place-popup-media-card">
-              <div className="place-popup-media-emoji">{getFirstEmoji(place.categories)}</div>
-              <p className="place-popup-media-caption">Нет изображения</p>
-            </div>
-            <button type="button" className="place-popup-add-button" disabled aria-label="Добавить фото (скоро)">
-              +
-            </button>
+            {place.imageUrls.length > 0 ? (
+              <>
+                <div className="place-popup-media-card place-popup-media-card--photo">
+                  <img className="place-popup-media-image" src={place.imageUrls[0]} alt={place.name || 'Фото заведения'} />
+                </div>
+                {place.imageUrls[1] ? (
+                  <div className="place-popup-media-card place-popup-media-card--photo">
+                    <img className="place-popup-media-image" src={place.imageUrls[1]} alt={`${place.name || 'Фото'} 2`} />
+                  </div>
+                ) : (
+                  <div className="place-popup-media-card">
+                    <div className="place-popup-media-emoji">{getFirstEmoji(place.categories)}</div>
+                    <p className="place-popup-media-caption">{place.imageUrls.length} фото</p>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="place-popup-media-card">
+                  <div className="place-popup-media-emoji">{getFirstEmoji(place.categories)}</div>
+                  <p className="place-popup-media-caption">Нет изображения</p>
+                </div>
+                <button type="button" className="place-popup-add-button" disabled aria-label="Добавить фото (скоро)">
+                  +
+                </button>
+              </>
+            )}
           </div>
 
           <div className="place-popup-grid">
