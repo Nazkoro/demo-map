@@ -62,12 +62,6 @@ export default function MapSidebar({ places, onSelectPlace }: Props) {
 
   return (
     <section className={`map-side-sheet${isCollapsed ? ' is-collapsed' : ''}`} aria-label="Подборка мест">
-      {!isCollapsed && (
-        <div className="map-side-sheet-head">
-          <h1 className="map-side-title">Карта нищего</h1>
-          <p className="map-side-subtitle">Подборка мест с лучшим соотношением цены и качества на этой карте.</p>
-        </div>
-      )}
       <div className="map-side-toolbar">
         <span className="map-side-toolbar-label">Рейтинг</span>
         <button

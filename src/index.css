@@ -2226,9 +2226,9 @@ body {
 }
 
 .map-recent-registrations-card.map-overlay-sheet {
-  background: rgba(232, 241, 252, 0.82);
-  border: 1px solid rgba(255, 255, 255, 0.88);
-  box-shadow: 0 20px 44px rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.52);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
 }
 
 .map-recent-sheet-head {
@@ -2238,11 +2238,11 @@ body {
   gap: 16px;
   margin: -18px -18px 14px -18px;
   padding: 16px 18px 15px;
-  background: rgba(255, 255, 255, 0.82);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   border-radius: 27px 27px 0 0;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+  border-bottom: 1px solid rgba(107, 114, 128, 0.12);
 }
 
 .map-recent-sheet-head-text {
@@ -2971,9 +2971,9 @@ body {
 }
 
 .map-recent-registrations-card.map-overlay-sheet {
-  background: rgba(230, 238, 250, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.65);
-  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.1);
+  background: rgba(255, 255, 255, 0.52);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
 }
 
 .map-recent-sheet-head {
@@ -3308,7 +3308,7 @@ body {
 .map-side-toolbar {
   height: 38px;
   padding: 0 14px 0 18px;
-  border-top: 1px solid rgba(107, 114, 128, 0.12);
+  border-top: none;
   border-bottom: 1px solid rgba(107, 114, 128, 0.12);
   display: flex;
   align-items: center;
