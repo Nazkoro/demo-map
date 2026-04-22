@@ -101,7 +101,7 @@ export default function AccountPage() {
     }
 
     setBusy(true);
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password: signupPassword,
     });
@@ -109,6 +109,12 @@ export default function AccountPage() {
 
     if (error) {
       setMsg(error.message);
+      return;
+    }
+
+    if (data.session) {
+      setMsg('Аккаунт создан, вы уже вошли в систему.');
+      setMode('home');
       return;
     }
 

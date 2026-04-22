@@ -74,6 +74,76 @@ export async function loadPlaces(): Promise<Place[]> {
   return (data ?? []).map(mapDbRowToPlace);
 }
 
+interface LoadPlacesByViewportParams {
+  minLat: number;
+  minLng: number;
+  maxLat: number;
+  maxLng: number;
+  minPrice: number | null;
+  maxPrice: number | null;
+  categoryKeys: string[] | null;
+  limit: number;
+  offset: number;
+}
+
+function hasCategoryOverlap(placeCategories: string[], selectedCategories: string[] | null): boolean {
+  if (!selectedCategories || selectedCategories.length === 0) {
+    return true;
+  }
+  return selectedCategories.some((category) => placeCategories.includes(category));
+}
+
+function fallbackFilterByViewport(allPlaces: Place[], params: LoadPlacesByViewportParams): Place[] {
+  return allPlaces
+    .filter((place) => place.lat >= params.minLat && place.lat <= params.maxLat)
+    .filter((place) => place.lng >= params.minLng && place.lng <= params.maxLng)
+    .filter((place) => (params.minPrice == null ? true : place.price >= params.minPrice))
+    .filter((place) => (params.maxPrice == null ? true : place.price <= params.maxPrice))
+    .filter((place) => hasCategoryOverlap(place.categories, params.categoryKeys))
+    .slice(params.offset, params.offset + params.limit);
+}
+
+function isRpcMissingError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+  const maybeError = error as { code?: string; message?: string };
+  return (
+    maybeError.code === 'PGRST202' ||
+    maybeError.code === '404' ||
+    (typeof maybeError.message === 'string' && maybeError.message.toLowerCase().includes('get_restaurants'))
+  );
+}
+
+export async function loadPlacesByViewport(params: LoadPlacesByViewportParams): Promise<Place[]> {
+  if (!supabase) {
+    return [];
+  }
+
+  const payload = {
+    p_min_lat: params.minLat,
+    p_min_lng: params.minLng,
+    p_max_lat: params.maxLat,
+    p_max_lng: params.maxLng,
+    p_min_price: params.minPrice,
+    p_max_price: params.maxPrice,
+    p_category_keys: params.categoryKeys,
+    p_limit: params.limit,
+    p_offset: params.offset,
+  };
+
+  const { data, error } = await supabase.rpc('get_restaurants', payload);
+  if (error) {
+    if (!isRpcMissingError(error)) {
+      throw error;
+    }
+    const allPlaces = await loadPlaces();
+    return fallbackFilterByViewport(allPlaces, params);
+  }
+
+  return (data ?? []).map(mapDbRowToPlace);
+}
+
 export async function insertPlace(
   lng: number,
   lat: number,

@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { PlaceFormData } from '../types';
 import { CATEGORIES } from '../lib/categories';
+import { supabase } from '../lib/supabase';
+import InlineAuthBlock from './InlineAuthBlock';
 
 const MAX_CATS = 3;
 const MAX_IMAGES = 5;
@@ -13,9 +15,11 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onSubmit: (data: PlaceFormData) => void;
+  isAuthenticated: boolean;
+  memberLabel?: string | null;
 }
 
-export default function AddPlaceModal({ open, onClose, onSubmit }: Props) {
+export default function AddPlaceModal({ open, onClose, onSubmit, isAuthenticated, memberLabel }: Props) {
   const [images, setImages] = useState<File[]>([]);
   const [isProcessingImages, setIsProcessingImages] = useState(false);
   const [name, setName] = useState('');
@@ -25,6 +29,7 @@ export default function AddPlaceModal({ open, onClose, onSubmit }: Props) {
   const [priceRaw, setPriceRaw] = useState(''); // строка в инпуте
   const [hours, setHours] = useState('');
   const [note, setNote] = useState('');
+  const [authExpanded, setAuthExpanded] = useState(false);
   const imagePreviews = useMemo(
     () => images.map((file) => ({ file, url: URL.createObjectURL(file) })),
     [images],
@@ -46,8 +51,15 @@ export default function AddPlaceModal({ open, onClose, onSubmit }: Props) {
       setPriceRaw('');
       setHours('');
       setNote('');
+      setAuthExpanded(false);
     }
   }, [open]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      setAuthExpanded(false);
+    }
+  }, [isAuthenticated]);
 
   if (!open) {
     return null;
@@ -67,6 +79,11 @@ export default function AddPlaceModal({ open, onClose, onSubmit }: Props) {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!isAuthenticated && supabase) {
+      alert('Войдите или зарегистрируйтесь в блоке выше, чтобы сохранить заведение.');
+      setAuthExpanded(true);
+      return;
+    }
     if (isProcessingImages) {
       alert('Подождите, изображения еще обрабатываются');
       return;
@@ -218,8 +235,35 @@ export default function AddPlaceModal({ open, onClose, onSubmit }: Props) {
           </button>
         </div>
 
-        {/* Scrollable form */}
-        <form className="am-body" onSubmit={handleSubmit}>
+        <div className="am-body">
+          {isAuthenticated ? (
+            <div className="am-auth-banner am-auth-banner--member">
+              <p className="am-auth-banner-title">Режим участника</p>
+              <div className="am-member-chip">
+                <span className="am-member-chip-label">Ник в аккаунте</span>
+                <span className="am-member-chip-value">{memberLabel?.trim() || '—'}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="am-auth-banner am-auth-banner--guest">
+              <div className="am-auth-banner-row">
+                <p className="am-auth-banner-title">
+                  Режим гостя <span className="am-auth-banner-hint">(доступен режим с аккаунтом)</span>
+                </p>
+                <button
+                  type="button"
+                  className="am-auth-banner-btn"
+                  onClick={() => setAuthExpanded((v) => !v)}
+                  aria-expanded={authExpanded}
+                >
+                  {authExpanded ? 'Свернуть' : 'Войти / Регистрация'}
+                </button>
+              </div>
+              {authExpanded && <InlineAuthBlock />}
+            </div>
+          )}
+
+        <form className="am-place-form" onSubmit={handleSubmit}>
           {/* Restaurant name */}
           <div className="am-field">
             <label className="am-label">Название заведения *</label>
@@ -374,6 +418,7 @@ export default function AddPlaceModal({ open, onClose, onSubmit }: Props) {
             </button>
           </div>
         </form>
+        </div>
       </div>
     </div>
   );

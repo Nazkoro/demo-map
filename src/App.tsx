@@ -3,7 +3,7 @@ import maplibregl from 'maplibre-gl';
 import { NavLink } from 'react-router-dom';
 
 import type { Place, PlaceFormData } from './types';
-import { loadPlaces, insertPlace, updateVotes, removePlace } from './lib/places';
+import { loadPlacesByViewport, insertPlace, updateVotes, removePlace } from './lib/places';
 import {
   PRICE_SLIDER_MIN,
   PRICE_SLIDER_MAX,
@@ -13,6 +13,7 @@ import {
   placePassesPriceFilter,
   placePassesNameFilter,
 } from './lib/filters';
+import type { Session } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
 import {
   addMarkerLayers,
@@ -38,6 +39,9 @@ import MapSidebar from './components/MapSidebar';
 import { getVersatilesLightStyle } from './lib/versatilesLightStyle';
 const MAP_CENTER: [number, number] = [27.5618, 53.9023];
 const MAP_ZOOM = 12;
+const VIEWPORT_FETCH_LIMIT = 500;
+const VIEWPORT_FETCH_OFFSET = 0;
+const VIEWPORT_FETCH_DEBOUNCE_MS = 250;
 
 interface Toast {
   msg: string;
@@ -48,6 +52,24 @@ interface Toast {
 interface SearchChip {
   text: string;
   placeId: string;
+}
+
+function sessionMemberLabel(session: Session | null): string | null {
+  const user = session?.user;
+  if (!user) {
+    return null;
+  }
+  const meta = user.user_metadata as Record<string, unknown> | undefined;
+  const nick = meta?.nickname;
+  if (typeof nick === 'string' && nick.trim()) {
+    return nick.trim();
+  }
+  const email = user.email;
+  if (email) {
+    const local = email.split('@')[0];
+    return local?.trim() || email;
+  }
+  return 'Участник';
 }
 
 export default function App() {
@@ -71,12 +93,81 @@ export default function App() {
   const [modalPrice, setModalPrice] = useState(false);
   const [modalSearch, setModalSearch] = useState(false);
   const [modalAdd, setModalAdd] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [memberLabel, setMemberLabel] = useState<string | null>(null);
 
   const [toast, setToast] = useState<Toast | null>(null);
   const [currentZoom, setCurrentZoom] = useState(MAP_ZOOM);
+  const [isMapReady, setIsMapReady] = useState(false);
+  const fetchSeqRef = useRef(0);
 
   const showToast = useCallback((msg: string, type: Toast['type'] = 'info') => {
     setToast({ msg, type, key: Date.now() });
+  }, []);
+
+  const fetchPlacesForViewport = useCallback(
+    async () => {
+      const map = mapRef.current;
+      if (!map || !isMapReady) {
+        return;
+      }
+      if (!supabase) {
+        setPlaces([]);
+        return;
+      }
+
+      const bounds = map.getBounds();
+      if (!bounds) {
+        return;
+      }
+
+      const west = bounds.getWest();
+      const south = bounds.getSouth();
+      const east = bounds.getEast();
+      const north = bounds.getNorth();
+
+      const requestId = ++fetchSeqRef.current;
+      try {
+        const nextPlaces = await loadPlacesByViewport({
+          minLat: Math.min(south, north),
+          minLng: Math.min(west, east),
+          maxLat: Math.max(south, north),
+          maxLng: Math.max(west, east),
+          minPrice: priceMin === PRICE_SLIDER_MIN ? null : priceMin,
+          maxPrice: priceMax === PRICE_SLIDER_MAX ? null : priceMax,
+          categoryKeys: selectedCategories.length > 0 ? selectedCategories : null,
+          limit: VIEWPORT_FETCH_LIMIT,
+          offset: VIEWPORT_FETCH_OFFSET,
+        });
+        if (requestId !== fetchSeqRef.current) {
+          return;
+        }
+        setPlaces(nextPlaces);
+      } catch (e: unknown) {
+        if (requestId !== fetchSeqRef.current) {
+          return;
+        }
+        showToast('Не удалось загрузить точки по области: ' + (e instanceof Error ? e.message : String(e)), 'error');
+      }
+    },
+    [isMapReady, priceMin, priceMax, selectedCategories, showToast],
+  );
+
+  useEffect(() => {
+    if (!supabase) {
+      setIsAuthenticated(false);
+      setMemberLabel(null);
+      return;
+    }
+    const applySession = (session: Session | null) => {
+      setIsAuthenticated(Boolean(session));
+      setMemberLabel(sessionMemberLabel(session));
+    };
+    supabase.auth.getSession().then(({ data }) => applySession(data.session));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      applySession(session);
+    });
+    return () => listener.subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -188,18 +279,7 @@ export default function App() {
       if (!supabase) {
         showToast('Supabase не настроен', 'error');
       }
-      try {
-        const data = await loadPlaces();
-        setPlaces(data);
-        ensureMarkerAssets(map, data);
-        updateClusterSource(map, data);
-        
-        if (data.length === 0) {
-          showToast('Пока нет точек. Добавьте первое заведение', 'info');
-        }
-      } catch (e: unknown) {
-        showToast('Не удалось загрузить данные: ' + (e instanceof Error ? e.message : String(e)), 'error');
-      }
+      setIsMapReady(true);
     });
 
     map.on('click', () => {
@@ -227,6 +307,38 @@ export default function App() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!isMapReady || !mapRef.current) {
+      return;
+    }
+
+    const map = mapRef.current;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleFetch = () => {
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+      }
+      debounceTimer = setTimeout(() => {
+        void fetchPlacesForViewport();
+      }, VIEWPORT_FETCH_DEBOUNCE_MS);
+    };
+
+    const onMoveEnd = () => {
+      scheduleFetch();
+    };
+
+    map.on('moveend', onMoveEnd);
+    scheduleFetch();
+
+    return () => {
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+      }
+      map.off('moveend', onMoveEnd);
+    };
+  }, [isMapReady, fetchPlacesForViewport]);
 
   // ── Rebuild markers when visible places change ─────────────────────────────
   const visiblePlaces = useMemo(
@@ -272,6 +384,10 @@ export default function App() {
 
   // ── Vote ───────────────────────────────────────────────────────────────────
   function handleVote(placeId: string, isUp: boolean) {
+    if (!isAuthenticated) {
+      showToast('Войдите в аккаунт, чтобы голосовать', 'info');
+      return;
+    }
     setPlaces((prev) => {
       const updated = prev.map((p) => {
         if (String(p.id) !== String(placeId)) {
@@ -289,6 +405,10 @@ export default function App() {
 
   // ── Delete ─────────────────────────────────────────────────────────────────
   async function handleDelete(placeId: string) {
+    if (!isAuthenticated) {
+      showToast('Войдите в аккаунт, чтобы удалять места', 'info');
+      return;
+    }
     if (!confirm('Удалить эту точку?')) {
       return;
     }
@@ -559,6 +679,8 @@ export default function App() {
           setPendingCoords(null);
         }}
         onSubmit={handleAddSubmit}
+        isAuthenticated={isAuthenticated}
+        memberLabel={memberLabel}
       />
 
       <PlaceSheet place={selectedPlace} onClose={closeAllPopups} onVote={handleVote} onDelete={handleDelete} />
