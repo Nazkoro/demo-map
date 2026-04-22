@@ -93,7 +93,12 @@ export default function App() {
   const [nameQuery, setNameQuery] = useState('');
   const [searchChip, setSearchChip] = useState<SearchChip | null>(null);
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
-  const [recentPanelOpen, setRecentPanelOpen] = useState(true);
+  const [recentPanelOpen, setRecentPanelOpen] = useState(() => {
+    if (typeof window === 'undefined') {
+      return true;
+    }
+    return !window.matchMedia('(max-width: 900px)').matches;
+  });
 
   const [isAddingMode, setIsAddingMode] = useState(false);
   const [pendingCoords, setPendingCoords] = useState<{ lng: number; lat: number } | null>(null);
@@ -648,7 +653,7 @@ export default function App() {
       <div className="map-overlay-root">
         <header className="map-app-header" role="banner">
           <div className="map-app-header__brand">
-            <h1 className="map-app-header__title">Карта нищего</h1>
+            <h1 className="map-app-header__title">Карта вкусных мест</h1>
             <p className="map-app-header__subtitle">
               Подборка ресторанов с наилучшим соотношением цены и качества в эпоху высоких цен.
             </p>

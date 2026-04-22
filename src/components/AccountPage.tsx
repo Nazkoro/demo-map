@@ -19,7 +19,7 @@ export default function AccountPage() {
   const [signupPassword, setSignupPassword] = useState('');
   const [signupPasswordConfirm, setSignupPasswordConfirm] = useState('');
 
-  const languageItems = useMemo(() => ['Русский', 'English', '日本語', '繁體中文'], []);
+  const languageItems = useMemo(() => ['Русский', 'English'], []);
 
   useEffect(() => {
     const root = document.getElementById('root');
@@ -279,10 +279,6 @@ export default function AccountPage() {
           <button type="button" className="account-row">
             <span className="account-row-icon">◌</span>
             <span>Privacy Policy</span>
-          </button>
-          <button type="button" className="account-row">
-            <span className="account-row-icon">◌</span>
-            <span>CHZZK</span>
           </button>
           <button type="button" className="account-row">
             <span className="account-row-icon">◌</span>
