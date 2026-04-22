@@ -1,17 +1,13 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import { NavLink } from 'react-router-dom';
 
 import type { Place, PlaceFormData } from './types';
-import { loadPlacesByViewport, insertPlace, updateVotes, removePlace } from './lib/places';
+import { loadPlacesByViewport, loadRecentPlaces, searchPlacesByName, insertPlace, updateVotes, removePlace } from './lib/places';
 import {
   PRICE_SLIDER_MIN,
   PRICE_SLIDER_MAX,
-  getVisiblePlaces,
   isFullPriceRange,
-  placePassesCategoryFilter,
-  placePassesPriceFilter,
-  placePassesNameFilter,
 } from './lib/filters';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
@@ -42,6 +38,10 @@ const MAP_ZOOM = 12;
 const VIEWPORT_FETCH_LIMIT = 500;
 const VIEWPORT_FETCH_OFFSET = 0;
 const VIEWPORT_FETCH_DEBOUNCE_MS = 250;
+const SEARCH_FETCH_LIMIT = 30;
+const SEARCH_FETCH_OFFSET = 0;
+const RECENT_FETCH_LIMIT = 8;
+const RECENT_FETCH_OFFSET = 0;
 
 interface Toast {
   msg: string;
@@ -82,7 +82,6 @@ export default function App() {
   const [priceMax, setPriceMax] = useState(PRICE_SLIDER_MAX);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [nameQuery, setNameQuery] = useState('');
-  const [focusBypassId, setFocusBypassId] = useState<string | null>(null);
   const [searchChip, setSearchChip] = useState<SearchChip | null>(null);
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
   const [recentPanelOpen, setRecentPanelOpen] = useState(true);
@@ -95,11 +94,15 @@ export default function App() {
   const [modalAdd, setModalAdd] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [memberLabel, setMemberLabel] = useState<string | null>(null);
+  const [searchResults, setSearchResults] = useState<Place[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [recentPlaces, setRecentPlaces] = useState<Place[]>([]);
 
   const [toast, setToast] = useState<Toast | null>(null);
   const [currentZoom, setCurrentZoom] = useState(MAP_ZOOM);
   const [isMapReady, setIsMapReady] = useState(false);
   const fetchSeqRef = useRef(0);
+  const searchSeqRef = useRef(0);
 
   const showToast = useCallback((msg: string, type: Toast['type'] = 'info') => {
     setToast({ msg, type, key: Date.now() });
@@ -151,6 +154,40 @@ export default function App() {
       }
     },
     [isMapReady, priceMin, priceMax, selectedCategories, showToast],
+  );
+
+  const fetchSearchResults = useCallback(
+    async (query: string) => {
+      const normalized = query.trim();
+      if (!normalized) {
+        setSearchLoading(false);
+        setSearchResults([]);
+        return [];
+      }
+      const requestId = ++searchSeqRef.current;
+      setSearchLoading(true);
+      try {
+        const matches = await searchPlacesByName({
+          query: normalized,
+          limit: SEARCH_FETCH_LIMIT,
+          offset: SEARCH_FETCH_OFFSET,
+        });
+        if (requestId !== searchSeqRef.current) {
+          return [];
+        }
+        setSearchResults(matches);
+        setSearchLoading(false);
+        return matches;
+      } catch (e: unknown) {
+        if (requestId !== searchSeqRef.current) {
+          return [];
+        }
+        setSearchLoading(false);
+        showToast('Не удалось выполнить поиск: ' + (e instanceof Error ? e.message : String(e)), 'error');
+        return [];
+      }
+    },
+    [showToast],
   );
 
   useEffect(() => {
@@ -279,6 +316,15 @@ export default function App() {
       if (!supabase) {
         showToast('Supabase не настроен', 'error');
       }
+      try {
+        const recent = await loadRecentPlaces({
+          limit: RECENT_FETCH_LIMIT,
+          offset: RECENT_FETCH_OFFSET,
+        });
+        setRecentPlaces(recent);
+      } catch (e: unknown) {
+        showToast('Не удалось загрузить блок "Оценка": ' + (e instanceof Error ? e.message : String(e)), 'error');
+      }
       setIsMapReady(true);
     });
 
@@ -287,7 +333,6 @@ export default function App() {
         return;
       } // handled by add-mode handler
       closeAllPopups();
-      setFocusBypassId(null);
     });
     map.on('zoom', syncZoom);
 
@@ -340,12 +385,6 @@ export default function App() {
     };
   }, [isMapReady, fetchPlacesForViewport]);
 
-  // ── Rebuild markers when visible places change ─────────────────────────────
-  const visiblePlaces = useMemo(
-    () => getVisiblePlaces(places, priceMin, priceMax, selectedCategories, nameQuery, focusBypassId),
-    [places, priceMin, priceMax, selectedCategories, nameQuery, focusBypassId],
-  );
-
   // Строгая граница: <10 кластеры, >=10 маркеры.
   const mapMode: 'cluster' | 'markers' = isClusterZoom(currentZoom) ? 'cluster' : 'markers';
 
@@ -358,11 +397,11 @@ export default function App() {
     if (!map || !map.getSource(CLUSTER_SOURCE_ID)) {
       return;
     }
-    ensureMarkerAssets(map, visiblePlaces);
-    updateClusterSource(map, visiblePlaces);
+    ensureMarkerAssets(map, places);
+    updateClusterSource(map, places);
     // Зависим от mapMode, а не currentZoom, чтобы не пересобирать DOM-маркеры
     // на каждом кадре анимации зума — только при фактическом переключении режима.
-  }, [visiblePlaces, mapMode]);
+  }, [places, mapMode]);
 
   function closeAllPopups() {
     setSelectedPlaceId(null);
@@ -421,9 +460,6 @@ export default function App() {
     setPlaces((prev) => prev.filter((p) => String(p.id) !== String(placeId)));
     if (searchChip?.placeId === placeId) {
       setSearchChip(null);
-    }
-    if (focusBypassId === placeId) {
-      setFocusBypassId(null);
     }
     closeAllPopups();
     showToast('Точка удалена', 'success');
@@ -484,22 +520,15 @@ export default function App() {
     setPriceMin(min);
     setPriceMax(max);
     setSelectedCategories(categories);
-    setFocusBypassId(null);
     setSearchChip(null);
     setModalPrice(false);
     closeAllPopups();
-    const visible = getVisiblePlaces(places, min, max, categories, nameQuery, null);
-    const hidden = places.length - visible.length;
-    if (hidden > 0) {
-      showToast(`Показано ${visible.length} из ${places.length} точек`, 'info');
-    }
   }
 
   function handleClearPriceFilter() {
     setPriceMin(PRICE_SLIDER_MIN);
     setPriceMax(PRICE_SLIDER_MAX);
     setSelectedCategories([]);
-    setFocusBypassId(null);
     setSearchChip(null);
     setModalPrice(false);
     closeAllPopups();
@@ -508,34 +537,36 @@ export default function App() {
   // ── Name search ───────────────────────────────────────────────────────────
   function handleApplyNameSearch(query: string) {
     setNameQuery(query);
-    setFocusBypassId(null);
-    setModalSearch(false);
     closeAllPopups();
-    if (query.trim()) {
-      const matches = places.filter(
-        (p) =>
-          placePassesPriceFilter(p, priceMin, priceMax) &&
-          placePassesCategoryFilter(p, selectedCategories) &&
-          placePassesNameFilter(p, query),
-      );
+
+    const run = async () => {
+      if (!query.trim()) {
+        setSearchChip(null);
+        return;
+      }
+      const matches = await fetchSearchResults(query);
+      if (matches.length === 0) {
+        // Оставляем модалку открытой, чтобы пользователь мог сразу исправить запрос.
+        setSearchChip(null);
+        return;
+      }
       if (matches.length === 1) {
-        focusPlaceOnMap(matches[0]);
+        setModalSearch(false);
+        const only = matches[0];
+        setPlaces((prev) => (prev.some((p) => p.id === only.id) ? prev : [only, ...prev]));
+        focusPlaceOnMap(only);
         return;
       }
       setSearchChip(null);
-      showToast(
-        matches.length ? `Найдено: ${matches.length}` : 'Ничего не найдено',
-        matches.length ? 'success' : 'info',
-      );
-    } else {
-      setSearchChip(null);
-    }
+    };
+    void run();
   }
 
   function handleClearSearch() {
     setNameQuery('');
-    setFocusBypassId(null);
     setSearchChip(null);
+    setSearchResults([]);
+    setSearchLoading(false);
     setModalSearch(false);
     closeAllPopups();
   }
@@ -547,11 +578,6 @@ export default function App() {
       return;
     }
 
-    const passesPrice = placePassesPriceFilter(place, priceMin, priceMax);
-    const passesCategory = placePassesCategoryFilter(place, selectedCategories);
-    const passesName = placePassesNameFilter(place, nameQuery);
-    const bypass = passesPrice && passesCategory && passesName ? null : place.id;
-    setFocusBypassId(bypass);
     setSearchChip({ text: place.name || '—', placeId: place.id });
     setModalSearch(false);
     closeAllPopups();
@@ -574,7 +600,6 @@ export default function App() {
   function dismissChip() {
     setSearchChip(null);
     setNameQuery('');
-    setFocusBypassId(null);
     closeAllPopups();
   }
 
@@ -602,7 +627,7 @@ export default function App() {
         </header>
 
         <div className="map-left-rail">
-          <MapSidebar places={visiblePlaces} onSelectPlace={focusPlaceOnMap} />
+          <MapSidebar places={places} onSelectPlace={focusPlaceOnMap} />
         </div>
 
         <div className="map-pc-right-rail">
@@ -628,8 +653,11 @@ export default function App() {
 
           {recentPanelOpen ? (
             <RecentRegistrationsPanel
-              places={places}
-              onSelectPlace={focusPlaceOnMap}
+              places={recentPlaces}
+              onSelectPlace={(place) => {
+                setPlaces((prev) => (prev.some((p) => p.id === place.id) ? prev : [place, ...prev]));
+                focusPlaceOnMap(place);
+              }}
               onClose={() => setRecentPanelOpen(false)}
             />
           ) : (
@@ -665,10 +693,14 @@ export default function App() {
       <SearchModal
         open={modalSearch}
         initialQuery={nameQuery}
-        places={places}
+        results={searchResults}
+        isLoading={searchLoading}
         onClose={() => setModalSearch(false)}
         onApply={handleApplyNameSearch}
-        onSelectPlace={(place) => focusPlaceOnMap(place)}
+        onSelectPlace={(place) => {
+          setPlaces((prev) => (prev.some((p) => p.id === place.id) ? prev : [place, ...prev]));
+          focusPlaceOnMap(place);
+        }}
         onClear={handleClearSearch}
       />
 

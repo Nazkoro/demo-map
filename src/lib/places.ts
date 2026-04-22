@@ -86,6 +86,17 @@ interface LoadPlacesByViewportParams {
   offset: number;
 }
 
+interface SearchPlacesByNameParams {
+  query: string;
+  limit: number;
+  offset: number;
+}
+
+interface LoadRecentPlacesParams {
+  limit: number;
+  offset: number;
+}
+
 function hasCategoryOverlap(placeCategories: string[], selectedCategories: string[] | null): boolean {
   if (!selectedCategories || selectedCategories.length === 0) {
     return true;
@@ -141,6 +152,56 @@ export async function loadPlacesByViewport(params: LoadPlacesByViewportParams): 
     return fallbackFilterByViewport(allPlaces, params);
   }
 
+  return (data ?? []).map(mapDbRowToPlace);
+}
+
+export async function searchPlacesByName(params: SearchPlacesByNameParams): Promise<Place[]> {
+  if (!supabase) {
+    return [];
+  }
+  const q = params.query.trim();
+  if (!q) {
+    return [];
+  }
+
+  const from = Math.max(0, params.offset);
+  const to = from + Math.max(0, params.limit) - 1;
+  if (to < from) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select('*')
+    .ilike('name', `%${q}%`)
+    .order('created_at', { ascending: false })
+    .range(from, to);
+
+  if (error) {
+    throw error;
+  }
+  return (data ?? []).map(mapDbRowToPlace);
+}
+
+export async function loadRecentPlaces(params: LoadRecentPlacesParams): Promise<Place[]> {
+  if (!supabase) {
+    return [];
+  }
+  const from = Math.max(0, params.offset);
+  const to = from + Math.max(0, params.limit) - 1;
+  if (to < from) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select('*')
+    .order('created_at', { ascending: false })
+    .range(from, to);
+
+  if (error) {
+    throw error;
+  }
   return (data ?? []).map(mapDbRowToPlace);
 }
 

@@ -4,14 +4,24 @@ import type { Place } from '../types';
 interface Props {
   open: boolean;
   initialQuery: string;
-  places: Place[];
+  results: Place[];
+  isLoading: boolean;
   onClose: () => void;
   onApply: (query: string) => void;
   onSelectPlace: (place: Place) => void;
   onClear: () => void;
 }
 
-export default function SearchModal({ open, initialQuery, places, onClose, onApply, onSelectPlace, onClear }: Props) {
+export default function SearchModal({
+  open,
+  initialQuery,
+  results,
+  isLoading,
+  onClose,
+  onApply,
+  onSelectPlace,
+  onClear,
+}: Props) {
   const [query, setQuery] = useState(initialQuery);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -26,12 +36,14 @@ export default function SearchModal({ open, initialQuery, places, onClose, onApp
     return null;
   }
 
-  const q = query.trim().toLowerCase();
-  const matches = q ? places.filter((p) => (p.name || '').toLowerCase().includes(q)) : [];
+  const q = query.trim();
+  const matches = q ? results : [];
 
   const hint = !q
     ? 'Введите название — ниже появятся совпадения. Нажмите на строку, чтобы перейти к маркеру.'
-    : matches.length > 0
+      : isLoading
+        ? 'Идет поиск...'
+        : matches.length > 0
       ? `Найдено: ${matches.length}. Нажмите строку — карта перейдёт к маркеру.`
       : 'Ничего не найдено. Попробуйте другой запрос.';
 
