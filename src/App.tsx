@@ -2,8 +2,16 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import { NavLink } from 'react-router-dom';
 
-import type { Place, PlaceFormData } from './types';
-import { loadPlacesByViewport, loadRecentPlaces, searchPlacesByName, insertPlace, updateVotes, removePlace } from './lib/places';
+import type { Place, PlaceFormData, PlaceUpdateData } from './types';
+import {
+  loadPlacesByViewport,
+  loadRecentPlaces,
+  searchPlacesByName,
+  insertPlace,
+  updatePlace,
+  updateVotes,
+  removePlace,
+} from './lib/places';
 import {
   PRICE_SLIDER_MIN,
   PRICE_SLIDER_MAX,
@@ -27,6 +35,7 @@ import MapView from './components/MapView';
 import FabStack from './components/FabStack';
 import StatusToast from './components/StatusToast';
 import AddPlaceModal from './components/AddPlaceModal';
+import EditPlaceModal from './components/EditPlaceModal';
 import PriceModal from './components/PriceModal';
 import SearchModal from './components/SearchModal';
 import PlaceSheet from './components/PlaceSheet';
@@ -92,6 +101,8 @@ export default function App() {
   const [modalPrice, setModalPrice] = useState(false);
   const [modalSearch, setModalSearch] = useState(false);
   const [modalAdd, setModalAdd] = useState(false);
+  const [modalEdit, setModalEdit] = useState(false);
+  const [editingPlace, setEditingPlace] = useState<Place | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [memberLabel, setMemberLabel] = useState<string | null>(null);
   const [searchResults, setSearchResults] = useState<Place[]>([]);
@@ -415,6 +426,7 @@ export default function App() {
       }
       setModalPrice(false);
       setModalSearch(false);
+      setModalEdit(false);
       closeAllPopups();
     }
     document.addEventListener('keydown', onKeyDown);
@@ -513,6 +525,28 @@ export default function App() {
     }
     setModalAdd(false);
     setPendingCoords(null);
+  }
+
+  async function handleEditSubmit(form: PlaceUpdateData) {
+    if (!editingPlace) {
+      return;
+    }
+    if (!isAuthenticated) {
+      showToast('Войдите в аккаунт, чтобы редактировать места', 'info');
+      return;
+    }
+    try {
+      const updated = await updatePlace(editingPlace.id, form);
+      setPlaces((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      setRecentPlaces((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      setSearchResults((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      setEditingPlace(updated);
+      setSelectedPlaceId(updated.id);
+      showToast('Изменения сохранены', 'success');
+      setModalEdit(false);
+    } catch (e: unknown) {
+      showToast('Не удалось сохранить изменения: ' + (e instanceof Error ? e.message : String(e)), 'error');
+    }
   }
 
   // ── Price filter ──────────────────────────────────────────────────────────
@@ -715,7 +749,23 @@ export default function App() {
         memberLabel={memberLabel}
       />
 
-      <PlaceSheet place={selectedPlace} onClose={closeAllPopups} onVote={handleVote} onDelete={handleDelete} />
+      <EditPlaceModal
+        open={modalEdit}
+        place={editingPlace}
+        onClose={() => setModalEdit(false)}
+        onSubmit={handleEditSubmit}
+      />
+
+      <PlaceSheet
+        place={selectedPlace}
+        onClose={closeAllPopups}
+        onVote={handleVote}
+        onDelete={handleDelete}
+        onEdit={(place) => {
+          setEditingPlace(place);
+          setModalEdit(true);
+        }}
+      />
 
       <nav className="map-bottom-nav" aria-label="Основная навигация">
         <NavLink to="/" end className={({ isActive }) => `map-bottom-nav__item${isActive ? ' is-active' : ''}`}>

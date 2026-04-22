@@ -25,3 +25,15 @@ export interface PlaceFormData {
   note: string;
   images: File[];
 }
+
+export interface PlaceUpdateData {
+  name: string;
+  price: number; // BYN
+  categories: string[];
+  dish: string;
+  hours: string;
+  address: string;
+  note: string;
+  keepImageUrls: string[];
+  newImages: File[];
+}

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import type { MouseEvent } from 'react';
 
 import type { Place } from '../types';
@@ -8,6 +9,7 @@ interface Props {
   onClose: () => void;
   onVote: (placeId: string, isUp: boolean) => void;
   onDelete: (placeId: string) => void;
+  onEdit: (place: Place) => void;
 }
 
 function formatPrice(price: number): string {
@@ -30,7 +32,26 @@ function closeHeadMenu(e: MouseEvent<Element>) {
   (e.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open');
 }
 
-export default function PlaceSheet({ place, onClose, onVote, onDelete }: Props) {
+export default function PlaceSheet({ place, onClose, onVote, onDelete, onEdit }: Props) {
+  const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setFullscreenImage(null);
+  }, [place?.id]);
+
+  useEffect(() => {
+    if (!fullscreenImage) {
+      return;
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setFullscreenImage(null);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [fullscreenImage]);
+
   if (!place) {
     return null;
   }
@@ -86,6 +107,16 @@ export default function PlaceSheet({ place, onClose, onVote, onDelete }: Props) 
                   className="place-popup-menu-item"
                   onClick={(e) => {
                     closeHeadMenu(e);
+                    onEdit(place);
+                  }}
+                >
+                  Редактировать
+                </button>
+                <button
+                  type="button"
+                  className="place-popup-menu-item"
+                  onClick={(e) => {
+                    closeHeadMenu(e);
                     onDelete(place.id);
                   }}
                 >
@@ -111,11 +142,25 @@ export default function PlaceSheet({ place, onClose, onVote, onDelete }: Props) 
             {place.imageUrls.length > 0 ? (
               <>
                 <div className="place-popup-media-card place-popup-media-card--photo">
-                  <img className="place-popup-media-image" src={place.imageUrls[0]} alt={place.name || 'Фото заведения'} />
+                  <button
+                    type="button"
+                    className="place-popup-media-image-btn"
+                    onClick={() => setFullscreenImage(place.imageUrls[0])}
+                    aria-label="Открыть фото на весь экран"
+                  >
+                    <img className="place-popup-media-image" src={place.imageUrls[0]} alt={place.name || 'Фото заведения'} />
+                  </button>
                 </div>
                 {place.imageUrls[1] ? (
                   <div className="place-popup-media-card place-popup-media-card--photo">
-                    <img className="place-popup-media-image" src={place.imageUrls[1]} alt={`${place.name || 'Фото'} 2`} />
+                    <button
+                      type="button"
+                      className="place-popup-media-image-btn"
+                      onClick={() => setFullscreenImage(place.imageUrls[1])}
+                      aria-label="Открыть фото на весь экран"
+                    >
+                      <img className="place-popup-media-image" src={place.imageUrls[1]} alt={`${place.name || 'Фото'} 2`} />
+                    </button>
                   </div>
                 ) : (
                   <div className="place-popup-media-card">
@@ -253,6 +298,27 @@ export default function PlaceSheet({ place, onClose, onVote, onDelete }: Props) 
           </div>
         </div>
       </section>
+      {fullscreenImage && (
+        <div className="place-image-viewer" role="dialog" aria-label="Просмотр фото">
+          <button
+            type="button"
+            className="place-image-viewer__backdrop"
+            onClick={() => setFullscreenImage(null)}
+            aria-label="Закрыть просмотр фото"
+          />
+          <div className="place-image-viewer__content">
+            <button
+              type="button"
+              className="place-image-viewer__close"
+              onClick={() => setFullscreenImage(null)}
+              aria-label="Закрыть"
+            >
+              ×
+            </button>
+            <img className="place-image-viewer__image" src={fullscreenImage} alt={place.name || 'Фото заведения'} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

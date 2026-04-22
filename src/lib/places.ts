@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Place, PlaceFormData } from '../types';
+import type { Place, PlaceFormData, PlaceUpdateData } from '../types';
 
 const TABLE = 'places';
 const IMAGES_BUCKET = 'place-images';
@@ -61,6 +61,12 @@ async function deleteStoragePaths(paths: string[]): Promise<void> {
     return;
   }
   await supabase.storage.from(IMAGES_BUCKET).remove(paths);
+}
+
+function extractStoragePathFromPublicUrl(url: string): string {
+  const marker = `/storage/v1/object/public/${IMAGES_BUCKET}/`;
+  const index = url.indexOf(marker);
+  return index === -1 ? '' : url.slice(index + marker.length);
 }
 
 export async function loadPlaces(): Promise<Place[]> {
@@ -271,6 +277,42 @@ export async function updateVotes(place: Place): Promise<void> {
   }
 }
 
+export async function updatePlace(id: string, data: PlaceUpdateData): Promise<Place> {
+  if (!supabase) {
+    throw new Error('Supabase не настроен');
+  }
+  const { urls: uploadedImageUrls, paths: uploadedImagePaths } = await uploadPlaceImages(id, data.newImages);
+  const finalImageUrls = [...data.keepImageUrls, ...uploadedImageUrls];
+  const keptSet = new Set(data.keepImageUrls);
+  const removedStoragePaths = (await supabase.from(TABLE).select('image_urls').eq('id', id).maybeSingle()).data?.image_urls;
+  const removedPaths = (Array.isArray(removedStoragePaths) ? removedStoragePaths : [])
+    .filter((url: unknown): url is string => typeof url === 'string' && !keptSet.has(url))
+    .map(extractStoragePathFromPublicUrl)
+    .filter(Boolean);
+
+  const payload = {
+    name: data.name.trim(),
+    price: data.price,
+    categories: data.categories,
+    dish: data.dish.trim(),
+    hours: data.hours.trim(),
+    address: data.address.trim(),
+    note: data.note.trim(),
+    image_urls: finalImageUrls,
+  };
+  try {
+    const { data: updatedRow, error } = await supabase.from(TABLE).update(payload).eq('id', id).select().single();
+    if (error) {
+      throw error;
+    }
+    await deleteStoragePaths(removedPaths);
+    return mapDbRowToPlace(updatedRow);
+  } catch (error) {
+    await deleteStoragePaths(uploadedImagePaths);
+    throw error;
+  }
+}
+
 export async function removePlace(id: string): Promise<void> {
   if (!supabase) {
     return;
@@ -284,11 +326,7 @@ export async function removePlace(id: string): Promise<void> {
   const storagePaths = (storageObjects ?? []).map((item) => `${id}/${item.name}`);
   const imageUrls = Array.isArray(imageRows?.image_urls) ? imageRows.image_urls : [];
   const imagePathsFromUrls = imageUrls
-    .map((url: string) => {
-      const marker = `/storage/v1/object/public/${IMAGES_BUCKET}/`;
-      const index = url.indexOf(marker);
-      return index === -1 ? '' : url.slice(index + marker.length);
-    })
+    .map(extractStoragePathFromPublicUrl)
     .filter(Boolean);
 
   const allPaths = Array.from(new Set([...storagePaths, ...imagePathsFromUrls]));
