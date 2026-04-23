@@ -3741,13 +3741,75 @@ body {
   box-shadow: 0 24px 48px rgba(15, 23, 42, 0.16);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  transition: transform 0.2s ease;
+}
+
+.place-sheet.is-dragging {
+  transition: none;
 }
 
 .place-sheet-handle {
   width: 40px;
-  height: 4px;
+  height: 14px;
   margin: 14px auto 6px;
-  background: #d1d5db;
+  position: relative;
+  display: block;
+  background: transparent;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.place-sheet-handle.is-active {
+  cursor: grabbing;
+}
+
+.place-sheet-handle::before,
+.place-sheet-handle::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  width: 14px;
+  height: 3px;
+  border-radius: 999px;
+  background: #9ca3af;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.18);
+  transition:
+    transform 0.16s ease,
+    background 0.16s ease,
+    box-shadow 0.16s ease,
+    opacity 0.16s ease;
+}
+
+.place-sheet-handle::before {
+  left: 50%;
+  transform: translateX(calc(-100% - 1px)) rotate(0deg);
+}
+
+.place-sheet-handle::after {
+  left: 50%;
+  transform: translateX(1px) rotate(0deg);
+}
+
+.place-sheet-handle.is-active::before,
+.place-sheet-handle.is-active::after {
+  background: #6b7280;
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.22);
+}
+
+.place-sheet-handle.is-active::before {
+  transform: translateX(calc(-100% - 1px)) translateY(1px) rotate(16deg);
+}
+
+.place-sheet-handle.is-active::after {
+  transform: translateX(1px) translateY(1px) rotate(-16deg);
+}
+
+@media (min-width: 900px) {
+  .place-sheet-handle {
+    display: block;
+  }
 }
 
 .place-popup-head {
@@ -4714,12 +4776,20 @@ body.account-mode {
   }
 
   .map-bottom-nav {
+    height: 48px;
+    padding: 0 16px;
     min-width: 238px;
     gap: 34px;
   }
 
   .map-bottom-nav__item {
-    width: 22px;
+    width: 30px;
+    height: 30px;
+  }
+
+  .map-bottom-nav__icon {
+    width: 18px;
+    height: 18px;
   }
 }
 
@@ -4755,6 +4825,15 @@ body.account-mode {
   .place-sheet {
     animation: place-sheet-enter-bottom 0.18s ease-out;
     transform-origin: center bottom;
+  }
+
+  .map-hint-banner {
+    margin: 0 26px;
+    left: 0;
+    right: 0;
+    transform: none;
+    max-width: 100%;
+    border-radius: 20px;
   }
 
   @keyframes place-sheet-enter-bottom {

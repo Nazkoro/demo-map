@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import type { MouseEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { MouseEvent, PointerEvent } from 'react';
 
 import type { Place } from '../types';
 import { CATEGORIES, getFirstEmoji } from '../lib/categories';
@@ -34,9 +34,19 @@ function closeHeadMenu(e: MouseEvent<Element>) {
 
 export default function PlaceSheet({ place, onClose, onVote, onDelete, onEdit }: Props) {
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
+  const [dragOffset, setDragOffset] = useState(0);
+  const [isDraggingSheet, setIsDraggingSheet] = useState(false);
+  const dragPointerIdRef = useRef<number | null>(null);
+  const dragStartYRef = useRef(0);
 
   useEffect(() => {
     setFullscreenImage(null);
+  }, [place?.id]);
+
+  useEffect(() => {
+    setDragOffset(0);
+    setIsDraggingSheet(false);
+    dragPointerIdRef.current = null;
   }, [place?.id]);
 
   useEffect(() => {
@@ -55,6 +65,45 @@ export default function PlaceSheet({ place, onClose, onVote, onDelete, onEdit }:
   if (!place) {
     return null;
   }
+
+  const closeThreshold = 110;
+
+  const handleDragStart = (e: PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) {
+      return;
+    }
+    dragPointerIdRef.current = e.pointerId;
+    dragStartYRef.current = e.clientY;
+    setIsDraggingSheet(true);
+    setDragOffset(0);
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const handleDragMove = (e: PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingSheet || dragPointerIdRef.current !== e.pointerId) {
+      return;
+    }
+    const nextOffset = Math.max(0, e.clientY - dragStartYRef.current);
+    setDragOffset(nextOffset);
+  };
+
+  const finishDrag = (pointerId: number) => {
+    if (dragPointerIdRef.current !== pointerId) {
+      return;
+    }
+    dragPointerIdRef.current = null;
+    const shouldClose = dragOffset > closeThreshold;
+    setIsDraggingSheet(false);
+    if (shouldClose) {
+      onClose();
+      return;
+    }
+    setDragOffset(0);
+  };
+
+  const handleDragEnd = (e: PointerEvent<HTMLDivElement>) => {
+    finishDrag(e.pointerId);
+  };
 
   const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${place.lat},${place.lng}`)}`;
   const categoryLabels = getCategoryLabels(place.categories);
@@ -78,8 +127,19 @@ export default function PlaceSheet({ place, onClose, onVote, onDelete, onEdit }:
   return (
     <div className="place-sheet-layer" aria-live="polite">
       <button type="button" className="place-sheet-backdrop" onClick={onClose} aria-label="Закрыть карточку" />
-      <section className="place-sheet" role="dialog" aria-labelledby="placeSheetTitle">
-        <div className="place-sheet-handle" />
+      <section
+        className={`place-sheet${isDraggingSheet ? ' is-dragging' : ''}`}
+        role="dialog"
+        aria-labelledby="placeSheetTitle"
+        style={{ transform: dragOffset > 0 ? `translateY(${dragOffset}px)` : undefined }}
+      >
+        <div
+          className={`place-sheet-handle${isDraggingSheet ? ' is-active' : ''}`}
+          onPointerDown={handleDragStart}
+          onPointerMove={handleDragMove}
+          onPointerUp={handleDragEnd}
+          onPointerCancel={handleDragEnd}
+        />
         <div className="place-popup-head">
           <div className="place-popup-head-text">
             <h2 id="placeSheetTitle" className="place-popup-title">
@@ -88,15 +148,6 @@ export default function PlaceSheet({ place, onClose, onVote, onDelete, onEdit }:
             <p className="place-popup-address">{place.address || 'Адрес не указан'}</p>
           </div>
           <div className="place-popup-head-actions">
-            <a
-              href={mapUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="place-popup-head-icon place-popup-head-icon--link"
-              aria-label="Открыть на карте"
-            >
-              ›
-            </a>
             <details className="place-popup-menu-wrap">
               <summary className="place-popup-head-icon place-popup-menu-trigger" aria-label="Меню">
                 ⋯
