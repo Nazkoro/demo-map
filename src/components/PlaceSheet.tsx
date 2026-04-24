@@ -10,7 +10,11 @@ interface Props {
   commentsLoading: boolean;
   isAuthenticated: boolean;
   currentUserId: string | null;
+  isSaved: boolean;
+  userVote: 'up' | 'down' | null;
+  isVoting: boolean;
   onClose: () => void;
+  onToggleSaved: (placeId: string) => Promise<void>;
   onVote: (placeId: string, isUp: boolean) => void;
   onDelete: (placeId: string) => void;
   onEdit: (place: Place) => void;
@@ -44,7 +48,11 @@ export default function PlaceSheet({
   commentsLoading,
   isAuthenticated,
   currentUserId,
+  isSaved,
+  userVote,
+  isVoting,
   onClose,
+  onToggleSaved,
   onVote,
   onDelete,
   onEdit,
@@ -303,16 +311,26 @@ export default function PlaceSheet({
           </div>
 
           <div className="place-popup-actions-grid">
-            <button type="button" className="place-popup-pill-button" onClick={() => onVote(place.id, true)}>
-              <span aria-hidden="true">❤</span> {place.votesUp}
+            <button type="button" className="place-popup-pill-button" onClick={() => void onToggleSaved(place.id)}>
+              <span aria-hidden="true">{isSaved ? '❤' : '♡'}</span> {isSaved ? 'Сохранено' : 'Сохранить'}
             </button>
-            <button type="button" className="place-popup-pill-button" onClick={() => onVote(place.id, true)}>
+            <button
+              type="button"
+              className={`place-popup-pill-button${userVote === 'up' ? ' is-vote-up-active' : ''}`}
+              onClick={() => onVote(place.id, true)}
+              disabled={isVoting}
+            >
              Ценность ↑
             </button>
             <a href={mapUrl} target="_blank" rel="noreferrer" className="place-popup-pill-button place-popup-pill-link">
               Открыть на карте
             </a>
-            <button type="button" className="place-popup-pill-button" onClick={() => onVote(place.id, false)}>
+            <button
+              type="button"
+              className={`place-popup-pill-button${userVote === 'down' ? ' is-vote-down-active' : ''}`}
+              onClick={() => onVote(place.id, false)}
+              disabled={isVoting}
+            >
               Ценность ↓
             </button>
           </div>

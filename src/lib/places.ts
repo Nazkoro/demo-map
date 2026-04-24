@@ -264,17 +264,59 @@ export async function insertPlace(
   }
 }
 
-export async function updateVotes(place: Place): Promise<void> {
+interface VotePlaceResultRow {
+  votes_up: number | null;
+  votes_down: number | null;
+  my_vote: string | null;
+}
+
+export async function votePlace(
+  placeId: string,
+  isUp: boolean,
+): Promise<{ votesUp: number; votesDown: number; myVote: 'up' | 'down' | null }> {
   if (!supabase) {
-    return;
+    throw new Error('Supabase не настроен');
   }
-  const { error } = await supabase
-    .from(TABLE)
-    .update({ votes_up: place.votesUp, votes_down: place.votesDown })
-    .eq('id', place.id);
+
+  const { data, error } = await supabase.rpc('vote_place', {
+    p_place_id: placeId,
+    p_is_up: isUp,
+  });
   if (error) {
     throw error;
   }
+
+  const row = (Array.isArray(data) ? data[0] : data) as VotePlaceResultRow | null;
+  if (!row) {
+    throw new Error('Пустой ответ от vote_place');
+  }
+
+  const myVote = row.my_vote === 'up' || row.my_vote === 'down' ? row.my_vote : null;
+
+  return {
+    votesUp: Number(row.votes_up) || 0,
+    votesDown: Number(row.votes_down) || 0,
+    myVote,
+  };
+}
+
+export async function loadMyVote(placeId: string, userId: string): Promise<'up' | 'down' | null> {
+  if (!supabase) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('place_votes')
+    .select('vote')
+    .eq('place_id', placeId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) {
+    throw error;
+  }
+
+  const vote = data?.vote;
+  return vote === 'up' || vote === 'down' ? vote : null;
 }
 
 export async function updatePlace(id: string, data: PlaceUpdateData): Promise<Place> {

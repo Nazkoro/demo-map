@@ -9,9 +9,11 @@ import {
   searchPlacesByName,
   insertPlace,
   updatePlace,
-  updateVotes,
+  votePlace,
+  loadMyVote,
   removePlace,
 } from './lib/places';
+import { loadSavedPlaceIds, loadSavedPlaces, setPlaceSaved } from './lib/savedPlaces';
 import { addComment, loadComments, removeComment } from './lib/comments';
 import {
   PRICE_SLIDER_MIN,
@@ -42,6 +44,7 @@ import PriceModal from './components/PriceModal';
 import SearchModal from './components/SearchModal';
 import PlaceSheet from './components/PlaceSheet';
 import RecentRegistrationsPanel from './components/RecentRegistrationsPanel';
+import SavedPlacesPanel from './components/SavedPlacesPanel';
 import MapSidebar from './components/MapSidebar';
 import { getVersatilesLightStyle } from './lib/versatilesLightStyle';
 const MAP_CENTER: [number, number] = [27.5618, 53.9023];
@@ -104,6 +107,12 @@ export default function App() {
   const [searchResults, setSearchResults] = useState<Place[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [recentPlaces, setRecentPlaces] = useState<Place[]>([]);
+  const [savedPlaceIds, setSavedPlaceIds] = useState<string[]>([]);
+  const [savedListOpen, setSavedListOpen] = useState(false);
+  const [savedListPlaces, setSavedListPlaces] = useState<Place[]>([]);
+  const [savedListLoading, setSavedListLoading] = useState(false);
+  const [votingPlaceIds, setVotingPlaceIds] = useState<string[]>([]);
+  const [selectedPlaceVote, setSelectedPlaceVote] = useState<'up' | 'down' | null>(null);
 
   const [toast, setToast] = useState<Toast | null>(null);
   const [currentZoom, setCurrentZoom] = useState(MAP_ZOOM);
@@ -215,6 +224,15 @@ export default function App() {
     });
     return () => listener.subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (currentUserId) {
+      return;
+    }
+    setSavedPlaceIds([]);
+    setSavedListPlaces([]);
+    setSavedListOpen(false);
+  }, [currentUserId]);
 
   useEffect(() => {
     const root = document.getElementById('root');
@@ -437,19 +455,86 @@ export default function App() {
       showToast('Войдите в аккаунт, чтобы голосовать', 'info');
       return;
     }
-    setPlaces((prev) => {
-      const updated = prev.map((p) => {
-        if (String(p.id) !== String(placeId)) {
-          return p;
+    if (votingPlaceIds.includes(placeId)) {
+      return;
+    }
+
+    setVotingPlaceIds((prev) => [...prev, placeId]);
+    votePlace(placeId, isUp)
+      .then((result) => {
+        const applyVoteCounts = (list: Place[]) =>
+          list.map((item) =>
+            item.id === placeId ? { ...item, votesUp: result.votesUp, votesDown: result.votesDown } : item,
+          );
+        setPlaces((prev) => applyVoteCounts(prev));
+        setRecentPlaces((prev) => applyVoteCounts(prev));
+        setSearchResults((prev) => applyVoteCounts(prev));
+        if (selectedPlaceId === placeId) {
+          setSelectedPlaceVote(result.myVote);
         }
-        return { ...p, votesUp: isUp ? p.votesUp + 1 : p.votesUp, votesDown: !isUp ? p.votesDown + 1 : p.votesDown };
+      })
+      .catch((e: unknown) => {
+        showToast('Не удалось обновить голоса: ' + (e instanceof Error ? e.message : String(e)), 'error');
+      })
+      .finally(() => {
+        setVotingPlaceIds((prev) => prev.filter((id) => id !== placeId));
       });
-      const place = updated.find((p) => String(p.id) === String(placeId));
-      if (place) {
-        updateVotes(place).catch(() => showToast('Не удалось обновить голоса', 'error'));
+  }
+
+  async function handleToggleSaved(placeId: string) {
+    if (!isAuthenticated || !currentUserId) {
+      showToast('Войдите в аккаунт, чтобы сохранять места', 'info');
+      return;
+    }
+
+    const wasSaved = savedPlaceIds.includes(placeId);
+    const nextIds = wasSaved ? savedPlaceIds.filter((id) => id !== placeId) : [...savedPlaceIds, placeId];
+    setSavedPlaceIds(nextIds);
+    const targetPlace = places.find((item) => item.id === placeId) ?? null;
+    const previousSavedListPlaces = savedListPlaces;
+    if (savedListOpen) {
+      setSavedListPlaces((prev) => {
+        if (wasSaved) {
+          return prev.filter((item) => item.id !== placeId);
+        }
+        if (!targetPlace || prev.some((item) => item.id === placeId)) {
+          return prev;
+        }
+        return [targetPlace, ...prev];
+      });
+    }
+
+    try {
+      await setPlaceSaved(currentUserId, placeId, !wasSaved);
+      showToast(wasSaved ? 'Удалено из сохраненных' : 'Добавлено в сохраненные', 'success');
+    } catch (e: unknown) {
+      setSavedPlaceIds(savedPlaceIds);
+      if (savedListOpen) {
+        setSavedListPlaces(previousSavedListPlaces);
       }
-      return updated;
-    });
+      showToast('Не удалось обновить сохраненные: ' + (e instanceof Error ? e.message : String(e)), 'error');
+    }
+  }
+
+  async function handleOpenSavedList() {
+    if (!isAuthenticated || !currentUserId) {
+      showToast('Войдите в аккаунт, чтобы открыть saved list', 'info');
+      return;
+    }
+
+    setSavedListOpen(true);
+    setSavedListLoading(true);
+
+    try {
+      const [ids, list] = await Promise.all([loadSavedPlaceIds(currentUserId), loadSavedPlaces(currentUserId)]);
+      setSavedPlaceIds(ids);
+      setSavedListPlaces(list);
+    } catch (e: unknown) {
+      showToast('Не удалось загрузить saved list: ' + (e instanceof Error ? e.message : String(e)), 'error');
+      setSavedListPlaces([]);
+    } finally {
+      setSavedListLoading(false);
+    }
   }
 
   // ── Delete ─────────────────────────────────────────────────────────────────
@@ -639,6 +724,7 @@ export default function App() {
     if (!selectedPlaceId) {
       setSelectedPlaceComments([]);
       setCommentsLoading(false);
+      setSelectedPlaceVote(null);
       return;
     }
     let cancelled = false;
@@ -663,6 +749,31 @@ export default function App() {
       cancelled = true;
     };
   }, [selectedPlaceId, showToast]);
+
+  useEffect(() => {
+    if (!selectedPlaceId || !currentUserId || !isAuthenticated) {
+      setSelectedPlaceVote(null);
+      return;
+    }
+
+    let cancelled = false;
+    loadMyVote(selectedPlaceId, currentUserId)
+      .then((vote) => {
+        if (!cancelled) {
+          setSelectedPlaceVote(vote);
+        }
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          showToast('Не удалось загрузить ваш голос: ' + (e instanceof Error ? e.message : String(e)), 'error');
+          setSelectedPlaceVote(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPlaceId, currentUserId, isAuthenticated, showToast]);
 
   async function handleAddComment(placeId: string, body: string) {
     if (!isAuthenticated) {
@@ -721,6 +832,8 @@ export default function App() {
               chip={searchChip}
               onOpenPriceFilter={() => setModalPrice(true)}
               onOpenNameSearch={() => setModalSearch(true)}
+              onOpenSavedList={handleOpenSavedList}
+              isSavedListOpen={savedListOpen}
               onDismissChip={dismissChip}
             />
             {hasActiveMapFilter && (
@@ -765,6 +878,18 @@ export default function App() {
       )}
 
       {toast && <StatusToast key={toast.key} message={toast.msg} type={toast.type} onDone={() => setToast(null)} />}
+
+      <SavedPlacesPanel
+        open={savedListOpen}
+        places={savedListPlaces}
+        loading={savedListLoading}
+        onClose={() => setSavedListOpen(false)}
+        onSelectPlace={(place) => {
+          setPlaces((prev) => (prev.some((p) => p.id === place.id) ? prev : [place, ...prev]));
+          focusPlaceOnMap(place);
+          setSavedListOpen(false);
+        }}
+      />
 
       <PriceModal
         open={modalPrice}
@@ -813,7 +938,11 @@ export default function App() {
         commentsLoading={commentsLoading}
         isAuthenticated={isAuthenticated}
         currentUserId={currentUserId}
+        isSaved={selectedPlace ? savedPlaceIds.includes(selectedPlace.id) : false}
+        userVote={selectedPlaceVote}
+        isVoting={selectedPlace ? votingPlaceIds.includes(selectedPlace.id) : false}
         onClose={closeAllPopups}
+        onToggleSaved={handleToggleSaved}
         onVote={handleVote}
         onDelete={handleDelete}
         onEdit={(place) => {
