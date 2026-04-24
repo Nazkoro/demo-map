@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import { NavLink } from 'react-router-dom';
 
-import type { Place, PlaceFormData, PlaceUpdateData } from './types';
+import type { Place, PlaceComment, PlaceFormData, PlaceUpdateData } from './types';
 import {
   loadPlacesByViewport,
   loadRecentPlaces,
@@ -12,12 +12,14 @@ import {
   updateVotes,
   removePlace,
 } from './lib/places';
+import { addComment, loadComments, removeComment } from './lib/comments';
 import {
   PRICE_SLIDER_MIN,
   PRICE_SLIDER_MAX,
   isFullPriceRange,
 } from './lib/filters';
 import type { Session } from '@supabase/supabase-js';
+import { sessionNickname } from './lib/auth';
 import { supabase } from './lib/supabase';
 import {
   addMarkerLayers,
@@ -64,21 +66,7 @@ interface SearchChip {
 }
 
 function sessionMemberLabel(session: Session | null): string | null {
-  const user = session?.user;
-  if (!user) {
-    return null;
-  }
-  const meta = user.user_metadata as Record<string, unknown> | undefined;
-  const nick = meta?.nickname;
-  if (typeof nick === 'string' && nick.trim()) {
-    return nick.trim();
-  }
-  const email = user.email;
-  if (email) {
-    const local = email.split('@')[0];
-    return local?.trim() || email;
-  }
-  return 'Участник';
+  return sessionNickname(session) ?? 'Участник';
 }
 
 export default function App() {
@@ -109,7 +97,10 @@ export default function App() {
   const [modalEdit, setModalEdit] = useState(false);
   const [editingPlace, setEditingPlace] = useState<Place | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [memberLabel, setMemberLabel] = useState<string | null>(null);
+  const [selectedPlaceComments, setSelectedPlaceComments] = useState<PlaceComment[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
   const [searchResults, setSearchResults] = useState<Place[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [recentPlaces, setRecentPlaces] = useState<Place[]>([]);
@@ -209,11 +200,13 @@ export default function App() {
   useEffect(() => {
     if (!supabase) {
       setIsAuthenticated(false);
+      setCurrentUserId(null);
       setMemberLabel(null);
       return;
     }
     const applySession = (session: Session | null) => {
       setIsAuthenticated(Boolean(session));
+      setCurrentUserId(session?.user?.id ?? null);
       setMemberLabel(sessionMemberLabel(session));
     };
     supabase.auth.getSession().then(({ data }) => applySession(data.session));
@@ -470,8 +463,8 @@ export default function App() {
     }
     try {
       await removePlace(placeId);
-    } catch {
-      showToast('Не удалось удалить в Supabase', 'error');
+    } catch (e: unknown) {
+      showToast('Не удалось удалить в Supabase: ' + (e instanceof Error ? e.message : String(e)), 'error');
       return;
     }
     setPlaces((prev) => prev.filter((p) => String(p.id) !== String(placeId)));
@@ -642,6 +635,59 @@ export default function App() {
     closeAllPopups();
   }
 
+  useEffect(() => {
+    if (!selectedPlaceId) {
+      setSelectedPlaceComments([]);
+      setCommentsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setCommentsLoading(true);
+    loadComments(selectedPlaceId)
+      .then((rows) => {
+        if (!cancelled) {
+          setSelectedPlaceComments(rows);
+        }
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          showToast('Не удалось загрузить комментарии: ' + (e instanceof Error ? e.message : String(e)), 'error');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setCommentsLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPlaceId, showToast]);
+
+  async function handleAddComment(placeId: string, body: string) {
+    if (!isAuthenticated) {
+      showToast('Войдите в аккаунт, чтобы комментировать', 'info');
+      return;
+    }
+    try {
+      const created = await addComment(placeId, body);
+      setSelectedPlaceComments((prev) => [created, ...prev]);
+      showToast('Комментарий добавлен', 'success');
+    } catch (e: unknown) {
+      showToast('Не удалось добавить комментарий: ' + (e instanceof Error ? e.message : String(e)), 'error');
+    }
+  }
+
+  async function handleDeleteComment(commentId: string) {
+    try {
+      await removeComment(commentId);
+      setSelectedPlaceComments((prev) => prev.filter((item) => item.id !== commentId));
+      showToast('Комментарий удален', 'success');
+    } catch (e: unknown) {
+      showToast('Не удалось удалить комментарий: ' + (e instanceof Error ? e.message : String(e)), 'error');
+    }
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────
   const selectedPlace = places.find((place) => String(place.id) === String(selectedPlaceId)) ?? null;
   const hasActiveMapFilter = !isFullPriceRange(priceMin, priceMax) || selectedCategories.length > 0;
@@ -763,6 +809,10 @@ export default function App() {
 
       <PlaceSheet
         place={selectedPlace}
+        comments={selectedPlaceComments}
+        commentsLoading={commentsLoading}
+        isAuthenticated={isAuthenticated}
+        currentUserId={currentUserId}
         onClose={closeAllPopups}
         onVote={handleVote}
         onDelete={handleDelete}
@@ -770,6 +820,8 @@ export default function App() {
           setEditingPlace(place);
           setModalEdit(true);
         }}
+        onAddComment={handleAddComment}
+        onDeleteComment={handleDeleteComment}
       />
 
       <nav className="map-bottom-nav" aria-label="Основная навигация">

@@ -1,15 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MouseEvent, PointerEvent } from 'react';
 
-import type { Place } from '../types';
+import type { Place, PlaceComment } from '../types';
 import { CATEGORIES, getFirstEmoji } from '../lib/categories';
 
 interface Props {
   place: Place | null;
+  comments: PlaceComment[];
+  commentsLoading: boolean;
+  isAuthenticated: boolean;
+  currentUserId: string | null;
   onClose: () => void;
   onVote: (placeId: string, isUp: boolean) => void;
   onDelete: (placeId: string) => void;
   onEdit: (place: Place) => void;
+  onAddComment: (placeId: string, body: string) => Promise<void>;
+  onDeleteComment: (commentId: string) => Promise<void>;
 }
 
 function formatPrice(price: number): string {
@@ -32,10 +38,24 @@ function closeHeadMenu(e: MouseEvent<Element>) {
   (e.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open');
 }
 
-export default function PlaceSheet({ place, onClose, onVote, onDelete, onEdit }: Props) {
+export default function PlaceSheet({
+  place,
+  comments,
+  commentsLoading,
+  isAuthenticated,
+  currentUserId,
+  onClose,
+  onVote,
+  onDelete,
+  onEdit,
+  onAddComment,
+  onDeleteComment,
+}: Props) {
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState(0);
   const [isDraggingSheet, setIsDraggingSheet] = useState(false);
+  const [commentBody, setCommentBody] = useState('');
+  const [commentSubmitting, setCommentSubmitting] = useState(false);
   const dragPointerIdRef = useRef<number | null>(null);
   const dragStartYRef = useRef(0);
 
@@ -113,16 +133,20 @@ export default function PlaceSheet({ place, onClose, onVote, onDelete, onEdit }:
   const declinePct = totalVotes > 0 ? Math.round((place.votesDown / totalVotes) * 100) : 0;
   const barUp = totalVotes === 0 ? 50 : growthPct;
   const barDown = totalVotes === 0 ? 50 : declinePct;
-  const syntheticComments = place.note
-    ? [
-        {
-          id: `${place.id}-note`,
-          author: 'Аноним',
-          text: place.note,
-          createdLabel: formatDate(place.createdAt),
-        },
-      ]
-    : [];
+  const canSubmitComment = isAuthenticated && commentBody.trim().length > 0 && !commentSubmitting;
+
+  const handleSubmitComment = async () => {
+    if (!place || !canSubmitComment) {
+      return;
+    }
+    setCommentSubmitting(true);
+    try {
+      await onAddComment(place.id, commentBody);
+      setCommentBody('');
+    } finally {
+      setCommentSubmitting(false);
+    }
+  };
 
   return (
     <div className="place-sheet-layer" aria-live="polite">
@@ -283,7 +307,7 @@ export default function PlaceSheet({ place, onClose, onVote, onDelete, onEdit }:
               <span aria-hidden="true">❤</span> {place.votesUp}
             </button>
             <button type="button" className="place-popup-pill-button" onClick={() => onVote(place.id, true)}>
-              Значение ↑
+             Ценность ↑
             </button>
             <a href={mapUrl} target="_blank" rel="noreferrer" className="place-popup-pill-button place-popup-pill-link">
               Открыть на карте
@@ -293,21 +317,25 @@ export default function PlaceSheet({ place, onClose, onVote, onDelete, onEdit }:
             </button>
           </div>
 
-          <p className="place-popup-comments-bar">Комментарии: {syntheticComments.length}</p>
+          <p className="place-popup-comments-bar">Комментарии: {comments.length}</p>
 
           <div className="place-popup-comments">
             <div className="place-popup-comment-composer">
-              <div className="place-popup-comment-auth">
-                <input className="place-popup-comment-input" type="text" placeholder="Никнейм" />
-                <input className="place-popup-comment-input" type="password" placeholder="Пароль" />
-                <button type="button" className="place-popup-comment-register">
-                  Регистрация
-                </button>
-              </div>
-              <textarea className="place-popup-comment-textarea" placeholder="Оставьте ваш отзыв..." />
+              <textarea
+                className="place-popup-comment-textarea"
+                placeholder={isAuthenticated ? 'Оставьте ваш отзыв...' : 'Войдите в аккаунт, чтобы оставить комментарий'}
+                value={commentBody}
+                onChange={(e) => setCommentBody(e.target.value)}
+                disabled={!isAuthenticated || commentSubmitting}
+              />
               <div className="place-popup-comment-tools">
-                <button type="button" className="place-popup-comment-chip">
-                  Добавить фото 0/5
+                <button
+                  type="button"
+                  className="place-popup-comment-chip"
+                  onClick={() => void handleSubmitComment()}
+                  disabled={!canSubmitComment}
+                >
+                  {commentSubmitting ? 'Публикация...' : 'Опубликовать комментарий'}
                 </button>
               </div>
             </div>
@@ -322,21 +350,27 @@ export default function PlaceSheet({ place, onClose, onVote, onDelete, onEdit }:
             </div>
 
             <div className="place-popup-comment-list">
-              {syntheticComments.length > 0 ? (
-                syntheticComments.map((comment) => (
+              {commentsLoading ? (
+                <div className="place-popup-comment-empty">Загрузка комментариев...</div>
+              ) : comments.length > 0 ? (
+                comments.map((comment) => (
                   <article key={comment.id} className="place-popup-comment-card">
                     <div className="place-popup-comment-card-head">
-                      <h5 className="place-popup-comment-author">{comment.author}</h5>
-                      <button type="button" className="place-popup-comment-more" aria-label="Действия">
-                        ⋯
-                      </button>
+                      <h5 className="place-popup-comment-author">{comment.authorName}</h5>
+                      {currentUserId === comment.authorId && (
+                        <button
+                          type="button"
+                          className="place-popup-comment-more"
+                          aria-label="Удалить комментарий"
+                          onClick={() => void onDeleteComment(comment.id)}
+                        >
+                          Удалить
+                        </button>
+                      )}
                     </div>
-                    <p className="place-popup-comment-body">{comment.text}</p>
+                    <p className="place-popup-comment-body">{comment.body}</p>
                     <div className="place-popup-comment-meta">
-                      <span>{comment.createdLabel}</span>
-                      <button type="button" className="place-popup-comment-like">
-                        ❤ <span>0</span>
-                      </button>
+                      <span>{formatDate(comment.createdAt)}</span>
                     </div>
                   </article>
                 ))

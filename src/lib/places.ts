@@ -317,6 +317,7 @@ export async function removePlace(id: string): Promise<void> {
   if (!supabase) {
     return;
   }
+
   const { data: imageRows } = await supabase.from(TABLE).select('image_urls').eq('id', id).maybeSingle();
 
   const { data: storageObjects } = await supabase.storage.from(IMAGES_BUCKET).list(id, {
@@ -332,8 +333,11 @@ export async function removePlace(id: string): Promise<void> {
   const allPaths = Array.from(new Set([...storagePaths, ...imagePathsFromUrls]));
   await deleteStoragePaths(allPaths);
 
-  const { error } = await supabase.from(TABLE).delete().eq('id', id);
+  const { data: deletedRows, error } = await supabase.from(TABLE).delete().eq('id', id).select('id');
   if (error) {
     throw error;
+  }
+  if (!deletedRows || deletedRows.length === 0) {
+    throw new Error('Удаление не выполнено: запись не найдена или недостаточно прав (RLS policy).');
   }
 }

@@ -1,23 +1,42 @@
 import { useEffect, useMemo, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 
+import { sessionNickname, signInWithLoginId, signUpWithLoginId } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 
 type AuthMode = 'home' | 'signin' | 'signup';
+
+function VisibilityIcon({ off }: { off: boolean }) {
+  return off ? (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 3L21 21" />
+      <path d="M10.6 10.7C10.2 11.1 10 11.5 10 12C10 13.1 10.9 14 12 14C12.5 14 12.9 13.8 13.3 13.4" />
+      <path d="M9.4 5.8C10.2 5.3 11.1 5 12 5C16 5 19.3 7.6 20.6 11.2C20.7 11.5 20.7 11.8 20.6 12.1C20.2 13.2 19.6 14.2 18.8 15.1" />
+      <path d="M14.7 18.1C13.8 18.4 12.9 18.6 12 18.6C8 18.6 4.7 16 3.4 12.4C3.3 12.1 3.3 11.8 3.4 11.5C3.8 10.4 4.4 9.4 5.2 8.5" />
+    </svg>
+  ) : (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M2.5 12C4.1 8.6 7.7 6 12 6C16.3 6 19.9 8.6 21.5 12C19.9 15.4 16.3 18 12 18C7.7 18 4.1 15.4 2.5 12Z" />
+      <circle cx="12" cy="12" r="3.1" />
+    </svg>
+  );
+}
 
 export default function AccountPage() {
   const navigate = useNavigate();
   const [mode, setMode] = useState<AuthMode>('home');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string>('');
-  const [currentEmail, setCurrentEmail] = useState<string | null>(null);
+  const [currentNickname, setCurrentNickname] = useState<string | null>(null);
 
-  const [signinEmail, setSigninEmail] = useState('');
+  const [signinLoginId, setSigninLoginId] = useState('');
   const [signinPassword, setSigninPassword] = useState('');
 
-  const [signupEmail, setSignupEmail] = useState('');
+  const [signupLoginId, setSignupLoginId] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
   const [signupPasswordConfirm, setSignupPasswordConfirm] = useState('');
+  const [signupNickname, setSignupNickname] = useState('');
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
 
   const languageItems = useMemo(() => ['Русский', 'English'], []);
 
@@ -37,14 +56,14 @@ export default function AccountPage() {
 
   useEffect(() => {
     if (!supabase) {
-      setCurrentEmail(null);
+      setCurrentNickname(null);
       return;
     }
     supabase.auth.getSession().then(({ data }) => {
-      setCurrentEmail(data.session?.user.email ?? null);
+      setCurrentNickname(sessionNickname(data.session));
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setCurrentEmail(session?.user.email ?? null);
+      setCurrentNickname(sessionNickname(session));
     });
     return () => listener.subscription.unsubscribe();
   }, []);
@@ -57,21 +76,12 @@ export default function AccountPage() {
       return;
     }
 
-    const email = signinEmail.trim();
-    if (!email || signinPassword.length < 6) {
-      setMsg('Введите email и пароль (минимум 6 символов)');
-      return;
-    }
-
     setBusy(true);
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password: signinPassword,
-    });
+    const { error } = await signInWithLoginId(supabase, signinLoginId, signinPassword);
     setBusy(false);
 
     if (error) {
-      setMsg(error.message);
+      setMsg(error);
       return;
     }
 
@@ -86,41 +96,29 @@ export default function AccountPage() {
       return;
     }
 
-    const email = signupEmail.trim();
-    if (!email) {
-      setMsg('Введите email');
-      return;
-    }
-    if (signupPassword.length < 6) {
-      setMsg('Пароль должен быть минимум 6 символов');
-      return;
-    }
     if (signupPassword !== signupPasswordConfirm) {
       setMsg('Пароли не совпадают');
       return;
     }
 
     setBusy(true);
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password: signupPassword,
-    });
+    const { error, needsEmailConfirmation } = await signUpWithLoginId(supabase, signupLoginId, signupNickname, signupPassword);
     setBusy(false);
 
     if (error) {
-      setMsg(error.message);
+      setMsg(error);
       return;
     }
 
-    if (data.session) {
+    if (!needsEmailConfirmation) {
       setMsg('Аккаунт создан, вы уже вошли в систему.');
       setMode('home');
       return;
     }
 
-    setMsg('Аккаунт создан. Проверьте почту для подтверждения, затем войдите.');
+    setMsg('Аккаунт создан, но вход не выполнен. Отключите подтверждение email в настройках Supabase Auth.');
     setMode('signin');
-    setSigninEmail(email);
+    setSigninLoginId(signupLoginId.trim().toLowerCase());
     setSigninPassword('');
   }
 
@@ -153,13 +151,13 @@ export default function AccountPage() {
                 <span className="account-row-main">
                   <strong>Account</strong>
                   <small>
-                    {currentEmail
-                      ? `Вы вошли как ${currentEmail}`
+                    {currentNickname
+                      ? `Вы вошли как @${currentNickname}`
                       : 'Sign in to manage your nickname, password and activity.'}
                   </small>
                 </span>
               </div>
-              {currentEmail ? (
+              {currentNickname ? (
                 <button type="button" className="account-row" onClick={handleSignOut} disabled={busy}>
                   <span className="account-row-icon">◌</span>
                   <span>{busy ? 'Signing out...' : 'Sign out'}</span>
@@ -189,12 +187,12 @@ export default function AccountPage() {
               </div>
               <h2>Sign in</h2>
               <label>
-                Email
+                Login ID
                 <input
-                  type="email"
-                  value={signinEmail}
-                  onChange={(e) => setSigninEmail(e.target.value)}
-                  placeholder="you@example.com"
+                  type="text"
+                  value={signinLoginId}
+                  onChange={(e) => setSigninLoginId(e.target.value)}
+                  placeholder="unique login id"
                 />
               </label>
               <label>
@@ -225,30 +223,49 @@ export default function AccountPage() {
               </div>
               <h2>Sign up</h2>
               <label>
-                Email
+                Login ID
                 <input
-                  type="email"
-                  value={signupEmail}
-                  onChange={(e) => setSignupEmail(e.target.value)}
-                  placeholder="you@example.com"
+                  type="text"
+                  value={signupLoginId}
+                  onChange={(e) => setSignupLoginId(e.target.value)}
+                  placeholder="unique login id"
                 />
               </label>
               <label>
                 Password
-                <input
-                  type="password"
-                  value={signupPassword}
-                  onChange={(e) => setSignupPassword(e.target.value)}
-                  placeholder="Password"
-                />
+                <div className="account-password-wrap">
+                  <input
+                    type={showSignupPassword ? 'text' : 'password'}
+                    value={signupPassword}
+                    onChange={(e) => setSignupPassword(e.target.value)}
+                    placeholder="Password"
+                  />
+                  <button
+                    type="button"
+                    className="account-password-toggle"
+                    aria-label={showSignupPassword ? 'Скрыть пароль' : 'Показать пароль'}
+                    onClick={() => setShowSignupPassword((prev) => !prev)}
+                  >
+                    <VisibilityIcon off={showSignupPassword} />
+                  </button>
+                </div>
               </label>
               <label>
                 Confirm password
                 <input
-                  type="password"
+                  type={showSignupPassword ? 'text' : 'password'}
                   value={signupPasswordConfirm}
                   onChange={(e) => setSignupPasswordConfirm(e.target.value)}
                   placeholder="Re-enter your password"
+                />
+              </label>
+              <label>
+                Никнейм
+                <input
+                  type="text"
+                  value={signupNickname}
+                  onChange={(e) => setSignupNickname(e.target.value)}
+                  placeholder="Nickname shown on posts"
                 />
               </label>
               <button className="account-btn account-btn--primary" type="submit" disabled={busy}>

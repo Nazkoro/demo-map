@@ -37,3 +37,12 @@ export interface PlaceUpdateData {
   keepImageUrls: string[];
   newImages: File[];
 }
+
+export interface PlaceComment {
+  id: string;
+  placeId: string;
+  authorId: string;
+  authorName: string;
+  body: string;
+  createdAt: number;
+}
