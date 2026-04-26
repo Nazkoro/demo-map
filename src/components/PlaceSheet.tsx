@@ -335,6 +335,10 @@ export default function PlaceSheet({
     }
   };
 
+  const handleReportComment = (authorName: string) => {
+    alert(`Жалоба на комментарий пользователя "${authorName}" отправлена.`);
+  };
+
   return (
     <div className="place-sheet-layer" aria-live="polite">
       <button
@@ -532,18 +536,28 @@ export default function PlaceSheet({
                   disabled={commentSubmitting || isProcessingCommentImages}
                 />
                 <div className="place-popup-comment-images-box">
-                  <label
-                    className={`place-popup-comment-images-count${commentImages.length >= MAX_COMMENT_IMAGES || commentSubmitting || isProcessingCommentImages ? ' is-disabled' : ''}`}
-                  >
-                    Фото {commentImages.length}/{MAX_COMMENT_IMAGES} (до {MAX_COMMENT_IMAGE_SIZE_MB} МБ)
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      multiple
-                      onChange={handleCommentImagePick}
-                      disabled={commentSubmitting || isProcessingCommentImages || commentImages.length >= MAX_COMMENT_IMAGES}
-                    />
-                  </label>
+                  <div className="place-popup-comment-tools">
+                    <label
+                      className={`place-popup-comment-images-count${commentImages.length >= MAX_COMMENT_IMAGES || commentSubmitting || isProcessingCommentImages ? ' is-disabled' : ''}`}
+                    >
+                      Фото {commentImages.length}/{MAX_COMMENT_IMAGES} (до {MAX_COMMENT_IMAGE_SIZE_MB} МБ)
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        multiple
+                        onChange={handleCommentImagePick}
+                        disabled={commentSubmitting || isProcessingCommentImages || commentImages.length >= MAX_COMMENT_IMAGES}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="place-popup-comment-chip"
+                      onClick={() => void handleSubmitComment()}
+                      disabled={!canSubmitComment}
+                    >
+                      {commentSubmitting ? 'Публикация...' : 'Опубликовать комментарий'}
+                    </button>
+                  </div>
                   <div className="place-popup-comment-images-grid">
                     {commentImagePreviews.map((entry, index) => (
                       <div className="place-popup-comment-image-item" key={`${entry.file.name}-${entry.file.lastModified}-${index}`}>
@@ -560,16 +574,6 @@ export default function PlaceSheet({
                       </div>
                     ))}
                   </div>
-                </div>
-                <div className="place-popup-comment-tools">
-                  <button
-                    type="button"
-                    className="place-popup-comment-chip"
-                    onClick={() => void handleSubmitComment()}
-                    disabled={!canSubmitComment}
-                  >
-                    {commentSubmitting ? 'Публикация...' : 'Опубликовать комментарий'}
-                  </button>
                 </div>
               </div>
             ) : (
@@ -604,16 +608,34 @@ export default function PlaceSheet({
                   <article key={comment.id} className="place-popup-comment-card">
                     <div className="place-popup-comment-card-head">
                       <h5 className="place-popup-comment-author">{comment.authorName}</h5>
-                      {currentUserId === comment.authorId && (
-                        <button
-                          type="button"
-                          className="place-popup-comment-more"
-                          aria-label="Удалить комментарий"
-                          onClick={() => void onDeleteComment(comment.id)}
-                        >
-                          Удалить
-                        </button>
-                      )}
+                      <details className="place-popup-menu-wrap">
+                        <summary className="place-popup-head-icon place-popup-menu-trigger place-popup-comment-more" aria-label="Меню комментария">
+                          ⋯
+                        </summary>
+                        <div className="place-popup-menu">
+                          <button
+                            type="button"
+                            className="place-popup-menu-item"
+                            onClick={(e) => {
+                              closeHeadMenu(e);
+                              void onDeleteComment(comment.id);
+                            }}
+                            disabled={currentUserId !== comment.authorId}
+                          >
+                            Удалить
+                          </button>
+                          <button
+                            type="button"
+                            className="place-popup-menu-item"
+                            onClick={(e) => {
+                              closeHeadMenu(e);
+                              handleReportComment(comment.authorName);
+                            }}
+                          >
+                            Report
+                          </button>
+                        </div>
+                      </details>
                     </div>
                     <p className="place-popup-comment-body">{comment.body}</p>
                     {comment.imageUrls.length > 0 && (
