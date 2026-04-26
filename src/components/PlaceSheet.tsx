@@ -532,9 +532,18 @@ export default function PlaceSheet({
                   disabled={commentSubmitting || isProcessingCommentImages}
                 />
                 <div className="place-popup-comment-images-box">
-                  <p className="place-popup-comment-images-count">
+                  <label
+                    className={`place-popup-comment-images-count${commentImages.length >= MAX_COMMENT_IMAGES || commentSubmitting || isProcessingCommentImages ? ' is-disabled' : ''}`}
+                  >
                     Фото {commentImages.length}/{MAX_COMMENT_IMAGES} (до {MAX_COMMENT_IMAGE_SIZE_MB} МБ)
-                  </p>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      multiple
+                      onChange={handleCommentImagePick}
+                      disabled={commentSubmitting || isProcessingCommentImages || commentImages.length >= MAX_COMMENT_IMAGES}
+                    />
+                  </label>
                   <div className="place-popup-comment-images-grid">
                     {commentImagePreviews.map((entry, index) => (
                       <div className="place-popup-comment-image-item" key={`${entry.file.name}-${entry.file.lastModified}-${index}`}>
@@ -550,18 +559,6 @@ export default function PlaceSheet({
                         </button>
                       </div>
                     ))}
-                    {commentImages.length < MAX_COMMENT_IMAGES && (
-                      <label className={`place-popup-comment-image-upload${isProcessingCommentImages ? ' is-disabled' : ''}`}>
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp"
-                          multiple
-                          onChange={handleCommentImagePick}
-                          disabled={commentSubmitting || isProcessingCommentImages}
-                        />
-                        <span>{isProcessingCommentImages ? '...' : '+'}</span>
-                      </label>
-                    )}
                   </div>
                 </div>
                 <div className="place-popup-comment-tools">
