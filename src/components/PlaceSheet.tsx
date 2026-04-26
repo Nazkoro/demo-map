@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, MouseEvent, PointerEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import type { Place, PlaceComment } from '../types';
 import { CATEGORIES } from '../lib/categories';
@@ -103,6 +104,7 @@ export default function PlaceSheet({
   const [commentSubmitting, setCommentSubmitting] = useState(false);
   const dragPointerIdRef = useRef<number | null>(null);
   const dragStartYRef = useRef(0);
+  const navigate = useNavigate();
 
   useEffect(() => {
     setFullscreenImage(null);
@@ -394,25 +396,40 @@ export default function PlaceSheet({
           <p className="place-popup-comments-bar">Комментарии: {comments.length}</p>
 
           <div className="place-popup-comments">
-            <div className="place-popup-comment-composer">
-              <textarea
-                className="place-popup-comment-textarea"
-                placeholder={isAuthenticated ? 'Оставьте ваш отзыв...' : 'Войдите в аккаунт, чтобы оставить комментарий'}
-                value={commentBody}
-                onChange={(e) => setCommentBody(e.target.value)}
-                disabled={!isAuthenticated || commentSubmitting}
-              />
-              <div className="place-popup-comment-tools">
-                <button
-                  type="button"
-                  className="place-popup-comment-chip"
-                  onClick={() => void handleSubmitComment()}
-                  disabled={!canSubmitComment}
-                >
-                  {commentSubmitting ? 'Публикация...' : 'Опубликовать комментарий'}
-                </button>
+            {isAuthenticated ? (
+              <div className="place-popup-comment-composer">
+                <textarea
+                  className="place-popup-comment-textarea"
+                  placeholder="Оставьте ваш отзыв..."
+                  value={commentBody}
+                  onChange={(e) => setCommentBody(e.target.value)}
+                  disabled={commentSubmitting}
+                />
+                <div className="place-popup-comment-tools">
+                  <button
+                    type="button"
+                    className="place-popup-comment-chip"
+                    onClick={() => void handleSubmitComment()}
+                    disabled={!canSubmitComment}
+                  >
+                    {commentSubmitting ? 'Публикация...' : 'Опубликовать комментарий'}
+                  </button>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="am-auth-banner am-auth-banner--guest">
+                <div className="am-auth-banner-row">
+                  <p className="am-auth-banner-title">Войдите в аккаунт, чтобы оставить комментарий</p>
+                  <button
+                    type="button"
+                    className="am-auth-banner-btn"
+                    onClick={() => navigate('/account')}
+                  >
+                    Войти / Регистрация
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="place-popup-comment-filters">
               <button type="button" className="place-popup-comment-filter is-active">

@@ -801,6 +801,7 @@ export default function App() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   const selectedPlace = places.find((place) => String(place.id) === String(selectedPlaceId)) ?? null;
+  const isPlaceSheetOpen = selectedPlace !== null;
   const hasActiveMapFilter = !isFullPriceRange(priceMin, priceMax) || selectedCategories.length > 0;
 
   return (
@@ -953,25 +954,27 @@ export default function App() {
         onDeleteComment={handleDeleteComment}
       />
 
-      <nav className="map-bottom-nav" aria-label="Основная навигация">
-        <NavLink to="/" end className={({ isActive }) => `map-bottom-nav__item${isActive ? ' is-active' : ''}`}>
-          <span className="map-bottom-nav__icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <path d="M4.5 6.5 9 4l6 2.5 4.5-2v13L15 20l-6-2.5-4.5 2z" />
-              <path d="M9 4v13.5M15 6.5V20" />
-            </svg>
-          </span>
-        </NavLink>
-        <NavLink to="/account" className={({ isActive }) => `map-bottom-nav__item${isActive ? ' is-active' : ''}`}>
-          <span className="map-bottom-nav__icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <path d="M4 8h16M4 16h16" />
-              <circle cx="9" cy="8" r="2" />
-              <circle cx="15" cy="16" r="2" />
-            </svg>
-          </span>
-        </NavLink>
-      </nav>
+      {!isPlaceSheetOpen && (
+        <nav className="map-bottom-nav" aria-label="Основная навигация">
+          <NavLink to="/" end className={({ isActive }) => `map-bottom-nav__item${isActive ? ' is-active' : ''}`}>
+            <span className="map-bottom-nav__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M4.5 6.5 9 4l6 2.5 4.5-2v13L15 20l-6-2.5-4.5 2z" />
+                <path d="M9 4v13.5M15 6.5V20" />
+              </svg>
+            </span>
+          </NavLink>
+          <NavLink to="/account" className={({ isActive }) => `map-bottom-nav__item${isActive ? ' is-active' : ''}`}>
+            <span className="map-bottom-nav__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M4 8h16M4 16h16" />
+                <circle cx="9" cy="8" r="2" />
+                <circle cx="15" cy="16" r="2" />
+              </svg>
+            </span>
+          </NavLink>
+        </nav>
+      )}
     </div>
   );
 }
