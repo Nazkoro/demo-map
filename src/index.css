@@ -4546,6 +4546,83 @@ body {
   justify-content: flex-start;
 }
 
+.place-popup-comment-images-box {
+  padding: 10px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+}
+
+.place-popup-comment-images-count {
+  margin-bottom: 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.place-popup-comment-images-grid {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.place-popup-comment-image-item,
+.place-popup-comment-image-upload {
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  overflow: hidden;
+  position: relative;
+}
+
+.place-popup-comment-image-item {
+  border: 1px solid #dbe1eb;
+  background: #fff;
+}
+
+.place-popup-comment-image-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.place-popup-comment-image-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(17, 24, 39, 0.75);
+  color: #fff;
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.place-popup-comment-image-upload {
+  border: 1px dashed #c4cada;
+  background: #f3f5fa;
+  color: #8993a8;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  font-weight: 500;
+}
+
+.place-popup-comment-image-upload input {
+  display: none;
+}
+
+.place-popup-comment-image-upload.is-disabled {
+  cursor: wait;
+  opacity: 0.75;
+}
+
 .place-popup-comment-chip,
 .place-popup-comment-filter {
   min-height: 32px;
@@ -4622,6 +4699,31 @@ body {
   font-size: 0.84rem;
   line-height: 1.45;
   color: #374151;
+}
+
+.place-popup-comment-gallery {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.place-popup-comment-gallery-item {
+  width: 72px;
+  height: 72px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 0;
+  overflow: hidden;
+  background: #fff;
+  cursor: zoom-in;
+}
+
+.place-popup-comment-gallery-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .place-popup-comment-meta {

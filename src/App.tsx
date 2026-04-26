@@ -775,13 +775,13 @@ export default function App() {
     };
   }, [selectedPlaceId, currentUserId, isAuthenticated, showToast]);
 
-  async function handleAddComment(placeId: string, body: string) {
+  async function handleAddComment(placeId: string, body: string, images: File[]) {
     if (!isAuthenticated) {
       showToast('Войдите в аккаунт, чтобы комментировать', 'info');
       return;
     }
     try {
-      const created = await addComment(placeId, body);
+      const created = await addComment(placeId, body, images);
       setSelectedPlaceComments((prev) => [created, ...prev]);
       showToast('Комментарий добавлен', 'success');
     } catch (e: unknown) {

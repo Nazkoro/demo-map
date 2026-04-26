@@ -44,5 +44,6 @@ export interface PlaceComment {
   authorId: string;
   authorName: string;
   body: string;
+  imageUrls: string[];
   createdAt: number;
 }

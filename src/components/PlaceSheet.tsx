@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import type { CSSProperties, MouseEvent, PointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties, ChangeEvent, MouseEvent, PointerEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import type { Place, PlaceComment } from '../types';
@@ -19,9 +19,15 @@ interface Props {
   onVote: (placeId: string, isUp: boolean) => void;
   onDelete: (placeId: string) => void;
   onEdit: (place: Place) => void;
-  onAddComment: (placeId: string, body: string) => Promise<void>;
+  onAddComment: (placeId: string, body: string, images: File[]) => Promise<void>;
   onDeleteComment: (commentId: string) => Promise<void>;
 }
+
+const MAX_COMMENT_IMAGES = 3;
+const MAX_COMMENT_IMAGE_SIZE_MB = 3;
+const MAX_COMMENT_IMAGE_SIZE_BYTES = MAX_COMMENT_IMAGE_SIZE_MB * 1024 * 1024;
+const MAX_COMMENT_IMAGE_DIMENSION = 1920;
+const ALLOWED_COMMENT_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 function formatPrice(price: number): string {
   return price > 0 ? `${price} BYN` : 'Цена не указана';
@@ -101,10 +107,22 @@ export default function PlaceSheet({
   const [dragOffset, setDragOffset] = useState(0);
   const [isDraggingSheet, setIsDraggingSheet] = useState(false);
   const [commentBody, setCommentBody] = useState('');
+  const [commentImages, setCommentImages] = useState<File[]>([]);
+  const [isProcessingCommentImages, setIsProcessingCommentImages] = useState(false);
   const [commentSubmitting, setCommentSubmitting] = useState(false);
   const dragPointerIdRef = useRef<number | null>(null);
   const dragStartYRef = useRef(0);
   const navigate = useNavigate();
+  const commentImagePreviews = useMemo(
+    () => commentImages.map((file) => ({ file, url: URL.createObjectURL(file) })),
+    [commentImages],
+  );
+
+  useEffect(() => {
+    return () => {
+      commentImagePreviews.forEach((entry) => URL.revokeObjectURL(entry.url));
+    };
+  }, [commentImagePreviews]);
 
   useEffect(() => {
     setFullscreenImage(null);
@@ -194,7 +212,114 @@ export default function PlaceSheet({
   const declinePct = totalVotes > 0 ? Math.round((place.votesDown / totalVotes) * 100) : 0;
   const barUp = totalVotes === 0 ? 50 : growthPct;
   const barDown = totalVotes === 0 ? 50 : declinePct;
-  const canSubmitComment = isAuthenticated && commentBody.trim().length > 0 && !commentSubmitting;
+  const canSubmitComment =
+    isAuthenticated &&
+    commentBody.trim().length > 0 &&
+    !commentSubmitting &&
+    !isProcessingCommentImages;
+
+  async function fileToImage(file: File): Promise<HTMLImageElement> {
+    const src = URL.createObjectURL(file);
+    try {
+      const image = new Image();
+      await new Promise<void>((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = () => reject(new Error('Не удалось открыть изображение'));
+        image.src = src;
+      });
+      return image;
+    } finally {
+      URL.revokeObjectURL(src);
+    }
+  }
+
+  function canvasToBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob | null> {
+    return new Promise((resolve) => {
+      canvas.toBlob((blob) => resolve(blob), 'image/jpeg', quality);
+    });
+  }
+
+  async function compressCommentImage(file: File): Promise<File> {
+    if (file.size <= MAX_COMMENT_IMAGE_SIZE_BYTES) {
+      return file;
+    }
+    const image = await fileToImage(file);
+    const ratio = Math.min(1, MAX_COMMENT_IMAGE_DIMENSION / Math.max(image.width, image.height));
+    const width = Math.max(1, Math.round(image.width * ratio));
+    const height = Math.max(1, Math.round(image.height * ratio));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      throw new Error('Браузер не поддерживает обработку изображений');
+    }
+    ctx.drawImage(image, 0, 0, width, height);
+
+    const qualities = [0.85, 0.75, 0.65, 0.55, 0.45, 0.35];
+    for (const quality of qualities) {
+      const blob = await canvasToBlob(canvas, quality);
+      if (!blob) {
+        continue;
+      }
+      if (blob.size <= MAX_COMMENT_IMAGE_SIZE_BYTES) {
+        const compressedName = file.name.replace(/\.[^.]+$/, '') + '.jpg';
+        return new File([blob], compressedName, { type: 'image/jpeg', lastModified: Date.now() });
+      }
+    }
+    throw new Error(`Не удалось сжать файл до ${MAX_COMMENT_IMAGE_SIZE_MB} МБ`);
+  }
+
+  async function handleCommentImagePick(e: ChangeEvent<HTMLInputElement>) {
+    const incoming = Array.from(e.target.files ?? []);
+    if (!incoming.length) {
+      return;
+    }
+
+    const freeSlots = Math.max(0, MAX_COMMENT_IMAGES - commentImages.length);
+    if (!freeSlots) {
+      alert(`Можно загрузить максимум ${MAX_COMMENT_IMAGES} фото`);
+      e.target.value = '';
+      return;
+    }
+
+    const candidates = incoming.slice(0, freeSlots);
+    if (incoming.length > freeSlots) {
+      alert(`Можно загрузить максимум ${MAX_COMMENT_IMAGES} фото`);
+    }
+
+    setIsProcessingCommentImages(true);
+    try {
+      const prepared: File[] = [];
+      for (const image of candidates) {
+        if (!ALLOWED_COMMENT_IMAGE_TYPES.includes(image.type)) {
+          alert(`Файл "${image.name}" пропущен: поддерживаются JPG, PNG и WEBP`);
+          continue;
+        }
+        try {
+          const compressed = await compressCommentImage(image);
+          prepared.push(compressed);
+        } catch (error: unknown) {
+          alert(
+            `Файл "${image.name}" пропущен: ${
+              error instanceof Error ? error.message : 'ошибка обработки изображения'
+            }`,
+          );
+        }
+      }
+      if (prepared.length > 0) {
+        setCommentImages((prev) => [...prev, ...prepared]);
+      }
+    } finally {
+      setIsProcessingCommentImages(false);
+    }
+
+    e.target.value = '';
+  }
+
+  function removeCommentImage(index: number) {
+    setCommentImages((prev) => prev.filter((_, i) => i !== index));
+  }
 
   const handleSubmitComment = async () => {
     if (!place || !canSubmitComment) {
@@ -202,8 +327,9 @@ export default function PlaceSheet({
     }
     setCommentSubmitting(true);
     try {
-      await onAddComment(place.id, commentBody);
+      await onAddComment(place.id, commentBody, commentImages);
       setCommentBody('');
+      setCommentImages([]);
     } finally {
       setCommentSubmitting(false);
     }
@@ -403,8 +529,41 @@ export default function PlaceSheet({
                   placeholder="Оставьте ваш отзыв..."
                   value={commentBody}
                   onChange={(e) => setCommentBody(e.target.value)}
-                  disabled={commentSubmitting}
+                  disabled={commentSubmitting || isProcessingCommentImages}
                 />
+                <div className="place-popup-comment-images-box">
+                  <p className="place-popup-comment-images-count">
+                    Фото {commentImages.length}/{MAX_COMMENT_IMAGES} (до {MAX_COMMENT_IMAGE_SIZE_MB} МБ)
+                  </p>
+                  <div className="place-popup-comment-images-grid">
+                    {commentImagePreviews.map((entry, index) => (
+                      <div className="place-popup-comment-image-item" key={`${entry.file.name}-${entry.file.lastModified}-${index}`}>
+                        <img className="place-popup-comment-image-thumb" src={entry.url} alt={`Фото к комментарию ${index + 1}`} />
+                        <button
+                          type="button"
+                          className="place-popup-comment-image-remove"
+                          onClick={() => removeCommentImage(index)}
+                          aria-label={`Удалить фото ${index + 1}`}
+                          disabled={commentSubmitting || isProcessingCommentImages}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    {commentImages.length < MAX_COMMENT_IMAGES && (
+                      <label className={`place-popup-comment-image-upload${isProcessingCommentImages ? ' is-disabled' : ''}`}>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          multiple
+                          onChange={handleCommentImagePick}
+                          disabled={commentSubmitting || isProcessingCommentImages}
+                        />
+                        <span>{isProcessingCommentImages ? '...' : '+'}</span>
+                      </label>
+                    )}
+                  </div>
+                </div>
                 <div className="place-popup-comment-tools">
                   <button
                     type="button"
@@ -460,6 +619,25 @@ export default function PlaceSheet({
                       )}
                     </div>
                     <p className="place-popup-comment-body">{comment.body}</p>
+                    {comment.imageUrls.length > 0 && (
+                      <div className="place-popup-comment-gallery">
+                        {comment.imageUrls.map((imageUrl, imageIndex) => (
+                          <button
+                            type="button"
+                            key={`${comment.id}-image-${imageIndex}`}
+                            className="place-popup-comment-gallery-item"
+                            onClick={() => setFullscreenImage(imageUrl)}
+                            aria-label={`Открыть фото комментария ${imageIndex + 1}`}
+                          >
+                            <img
+                              className="place-popup-comment-gallery-image"
+                              src={imageUrl}
+                              alt={`Фото комментария ${imageIndex + 1}`}
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     <div className="place-popup-comment-meta">
                       <span>{formatDate(comment.createdAt)}</span>
                     </div>
