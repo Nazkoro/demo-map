@@ -121,13 +121,27 @@ export async function removeComment(commentId: string): Promise<void> {
   if (!supabase) {
     throw new Error('Supabase не настроен');
   }
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError || !user) {
+    throw new Error('Нужна авторизация для удаления комментария');
+  }
+
   const { data: commentRow, error: fetchError } = await supabase
     .from(TABLE)
-    .select('image_urls')
+    .select('author_id, image_urls')
     .eq('id', commentId)
     .maybeSingle();
   if (fetchError) {
     throw fetchError;
+  }
+  if (!commentRow) {
+    throw new Error('Комментарий не найден');
+  }
+  if (String(commentRow.author_id) !== user.id) {
+    throw new Error('Удалять комментарий может только автор');
   }
 
   const imagePaths = (Array.isArray(commentRow?.image_urls) ? commentRow.image_urls : [])
@@ -135,7 +149,12 @@ export async function removeComment(commentId: string): Promise<void> {
     .map(extractStoragePathFromPublicUrl)
     .filter(Boolean);
 
-  const { data, error } = await supabase.from(TABLE).delete().eq('id', commentId).select('id');
+  const { data, error } = await supabase
+    .from(TABLE)
+    .delete()
+    .eq('id', commentId)
+    .eq('author_id', user.id)
+    .select('id');
   if (error) {
     throw error;
   }

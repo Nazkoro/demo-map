@@ -604,7 +604,9 @@ export default function PlaceSheet({
               {commentsLoading ? (
                 <div className="place-popup-comment-empty">Загрузка комментариев...</div>
               ) : comments.length > 0 ? (
-                comments.map((comment) => (
+                comments.map((comment) => {
+                  const canDeleteComment = currentUserId === comment.authorId;
+                  return (
                   <article key={comment.id} className="place-popup-comment-card">
                     <div className="place-popup-comment-card-head">
                       <h5 className="place-popup-comment-author">{comment.authorName}</h5>
@@ -613,17 +615,18 @@ export default function PlaceSheet({
                           ⋯
                         </summary>
                         <div className="place-popup-menu">
-                          <button
-                            type="button"
-                            className="place-popup-menu-item"
-                            onClick={(e) => {
-                              closeHeadMenu(e);
-                              void onDeleteComment(comment.id);
-                            }}
-                            disabled={currentUserId !== comment.authorId}
-                          >
-                            Удалить
-                          </button>
+                          {canDeleteComment && (
+                            <button
+                              type="button"
+                              className="place-popup-menu-item"
+                              onClick={(e) => {
+                                closeHeadMenu(e);
+                                void onDeleteComment(comment.id);
+                              }}
+                            >
+                              Удалить
+                            </button>
+                          )}
                           <button
                             type="button"
                             className="place-popup-menu-item"
@@ -661,7 +664,8 @@ export default function PlaceSheet({
                       <span>{formatDate(comment.createdAt)}</span>
                     </div>
                   </article>
-                ))
+                  );
+                })
               ) : (
                 <div className="place-popup-comment-empty">
                   Пока нет комментариев.
