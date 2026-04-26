@@ -42,6 +42,33 @@ function closeHeadMenu(e: MouseEvent<Element>) {
   (e.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open');
 }
 
+function HeartIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      {filled ? (
+        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54z" fill="currentColor" />
+      ) : (
+        <path
+          d="M16.5 3c-1.74 0-3.41.81-4.5 2.09C10.91 3.81 9.24 3 7.5 3 4.42 3 2 5.42 2 8.5c0 3.78 3.4 6.86 8.55 11.54L12 21.35l1.45-1.32C18.6 15.36 22 12.28 22 8.5 22 5.42 19.58 3 16.5 3z"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      )}
+    </svg>
+  );
+}
+
+function TrendIcon({ up }: { up: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d={up ? 'M6 14l6-6 6 6' : 'M6 10l6 6 6-6'} fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export default function PlaceSheet({
   place,
   comments,
@@ -129,6 +156,20 @@ export default function PlaceSheet({
     setDragOffset(0);
   };
 
+  const closeFullscreenImage = () => {
+    setFullscreenImage(null);
+  };
+
+  const stopImageViewerEvent = (e: MouseEvent<Element> | PointerEvent<Element>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const closeFullscreenImageFromPointer = (e: PointerEvent<Element>) => {
+    stopImageViewerEvent(e);
+    closeFullscreenImage();
+  };
+
   const handleDragEnd = (e: PointerEvent<HTMLDivElement>) => {
     finishDrag(e.pointerId);
   };
@@ -158,7 +199,12 @@ export default function PlaceSheet({
 
   return (
     <div className="place-sheet-layer" aria-live="polite">
-      <button type="button" className="place-sheet-backdrop" onClick={onClose} aria-label="Закрыть карточку" />
+      <button
+        type="button"
+        className="place-sheet-backdrop"
+        onClick={onClose}
+        aria-label="Закрыть карточку"
+      />
       <section
         className={`place-sheet${isDraggingSheet ? ' is-dragging' : ''}`}
         role="dialog"
@@ -268,10 +314,7 @@ export default function PlaceSheet({
           <div className="place-popup-grid">
             <div className="place-popup-info-card">
               <p className="place-popup-card-label">Категория</p>
-              <div className="place-popup-card-value">
-                <span>{getFirstEmoji(place.categories)}</span>
-                <span>{categoryText}</span>
-              </div>
+              <p className="place-popup-card-text">{categoryText}</p>
             </div>
             <div className="place-popup-info-card">
               <p className="place-popup-card-label">Цена</p>
@@ -312,7 +355,10 @@ export default function PlaceSheet({
 
           <div className="place-popup-actions-grid">
             <button type="button" className="place-popup-pill-button" onClick={() => void onToggleSaved(place.id)}>
-              <span aria-hidden="true">{isSaved ? '❤' : '♡'}</span> {isSaved ? 'Сохранено' : 'Сохранить'}
+              <span className="place-popup-pill-icon" aria-hidden="true">
+                <HeartIcon filled={isSaved} />
+              </span>
+              {isSaved ? 'Сохранено' : 'Сохранить'}
             </button>
             <button
               type="button"
@@ -320,7 +366,10 @@ export default function PlaceSheet({
               onClick={() => onVote(place.id, true)}
               disabled={isVoting}
             >
-             Ценность ↑
+              <span className="place-popup-pill-icon" aria-hidden="true">
+                <TrendIcon up />
+              </span>
+              Ценность
             </button>
             <a href={mapUrl} target="_blank" rel="noreferrer" className="place-popup-pill-button place-popup-pill-link">
               Открыть на карте
@@ -331,7 +380,10 @@ export default function PlaceSheet({
               onClick={() => onVote(place.id, false)}
               disabled={isVoting}
             >
-              Ценность ↓
+              <span className="place-popup-pill-icon" aria-hidden="true">
+                <TrendIcon up={false} />
+              </span>
+              Ценность
             </button>
           </div>
 
@@ -394,7 +446,7 @@ export default function PlaceSheet({
                 ))
               ) : (
                 <div className="place-popup-comment-empty">
-                  Пока нет комментариев. Здесь будет лента отзывов, когда добавишь поддержку хранения.
+                  Пока нет комментариев.
                 </div>
               )}
             </div>
@@ -402,18 +454,26 @@ export default function PlaceSheet({
         </div>
       </section>
       {fullscreenImage && (
-        <div className="place-image-viewer" role="dialog" aria-label="Просмотр фото">
+        <div
+          className="place-image-viewer"
+          role="dialog"
+          aria-label="Просмотр фото"
+          onClick={stopImageViewerEvent}
+          onPointerDown={stopImageViewerEvent}
+        >
           <button
             type="button"
             className="place-image-viewer__backdrop"
-            onClick={() => setFullscreenImage(null)}
+            onPointerDown={closeFullscreenImageFromPointer}
+            onClick={stopImageViewerEvent}
             aria-label="Закрыть просмотр фото"
           />
-          <div className="place-image-viewer__content">
+          <div className="place-image-viewer__content" onPointerDown={stopImageViewerEvent} onClick={stopImageViewerEvent}>
             <button
               type="button"
               className="place-image-viewer__close"
-              onClick={() => setFullscreenImage(null)}
+              onPointerDown={closeFullscreenImageFromPointer}
+              onClick={stopImageViewerEvent}
               aria-label="Закрыть"
             >
               ×
