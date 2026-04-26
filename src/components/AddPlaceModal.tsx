@@ -247,9 +247,7 @@ export default function AddPlaceModal({ open, onClose, onSubmit, isAuthenticated
           ) : (
             <div className="am-auth-banner am-auth-banner--guest">
               <div className="am-auth-banner-row">
-                <p className="am-auth-banner-title">
-                  Режим гостя <span className="am-auth-banner-hint">(доступен режим с аккаунтом)</span>
-                </p>
+                <p className="am-auth-banner-title">Добавление мест доступно после входа</p>
                 <button
                   type="button"
                   className="am-auth-banner-btn"
@@ -413,7 +411,11 @@ export default function AddPlaceModal({ open, onClose, onSubmit, isAuthenticated
             <button type="button" className="am-btn am-btn--cancel" onClick={onClose}>
               Отмена
             </button>
-            <button type="submit" className="am-btn am-btn--submit" disabled={isProcessingImages}>
+            <button
+              type="submit"
+              className="am-btn am-btn--submit"
+              disabled={isProcessingImages || !isAuthenticated}
+            >
               Сохранить
             </button>
           </div>

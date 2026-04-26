@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { supabase } from '../lib/supabase';
-import { signInWithLoginId, signUpWithLoginId } from '../lib/auth';
+import { checkLoginIdTaken, signInWithLoginId, signUpWithLoginId, validateLoginId } from '../lib/auth';
 
 type Tab = 'signin' | 'signup';
+type LoginIdStatus = 'idle' | 'invalid' | 'checking' | 'found' | 'not_found' | 'available' | 'taken';
 
 interface Props {
   onSuccess?: () => void;
@@ -32,18 +33,95 @@ export default function InlineAuthBlock({ onSuccess }: Props) {
 
   const [signinLoginId, setSigninLoginId] = useState('');
   const [signinPassword, setSigninPassword] = useState('');
+  const [signinLoginIdStatus, setSigninLoginIdStatus] = useState<LoginIdStatus>('idle');
 
   const [signupLoginId, setSignupLoginId] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
   const [signupPasswordConfirm, setSignupPasswordConfirm] = useState('');
   const [signupNickname, setSignupNickname] = useState('');
+  const [signupLoginIdStatus, setSignupLoginIdStatus] = useState<LoginIdStatus>('idle');
   const [showSignupPassword, setShowSignupPassword] = useState(false);
+  const signinLoginCheckSeqRef = useRef(0);
+  const signupLoginCheckSeqRef = useRef(0);
+  const isSignupPasswordTooShort = signupPassword.length > 0 && signupPassword.length < 6;
+
+  useEffect(() => {
+    if (tab !== 'signin') {
+      setSigninLoginIdStatus('idle');
+      return;
+    }
+    const normalizedLoginId = signinLoginId.trim().toLowerCase();
+    if (!normalizedLoginId) {
+      setSigninLoginIdStatus('idle');
+      return;
+    }
+    if (validateLoginId(normalizedLoginId)) {
+      setSigninLoginIdStatus('invalid');
+      return;
+    }
+    const client = supabase;
+    if (!client) {
+      setSigninLoginIdStatus('idle');
+      return;
+    }
+    const currentRequest = ++signinLoginCheckSeqRef.current;
+    setSigninLoginIdStatus('checking');
+    const timeout = setTimeout(() => {
+      void checkLoginIdTaken(client, normalizedLoginId).then((taken) => {
+        if (currentRequest !== signinLoginCheckSeqRef.current) {
+          return;
+        }
+        setSigninLoginIdStatus(taken ? 'found' : 'not_found');
+      });
+    }, 450);
+    return () => clearTimeout(timeout);
+  }, [tab, signinLoginId]);
+
+  useEffect(() => {
+    if (tab !== 'signup') {
+      setSignupLoginIdStatus('idle');
+      return;
+    }
+    const normalizedLoginId = signupLoginId.trim().toLowerCase();
+    if (!normalizedLoginId) {
+      setSignupLoginIdStatus('idle');
+      return;
+    }
+    if (validateLoginId(normalizedLoginId)) {
+      setSignupLoginIdStatus('invalid');
+      return;
+    }
+    const client = supabase;
+    if (!client) {
+      setSignupLoginIdStatus('idle');
+      return;
+    }
+    const currentRequest = ++signupLoginCheckSeqRef.current;
+    setSignupLoginIdStatus('checking');
+    const timeout = setTimeout(() => {
+      void checkLoginIdTaken(client, normalizedLoginId).then((taken) => {
+        if (currentRequest !== signupLoginCheckSeqRef.current) {
+          return;
+        }
+        setSignupLoginIdStatus(taken ? 'taken' : 'available');
+      });
+    }, 450);
+    return () => clearTimeout(timeout);
+  }, [tab, signupLoginId]);
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
     setMsg('');
     if (!supabase) {
       setMsg('Supabase не настроен');
+      return;
+    }
+    if (signinLoginIdStatus === 'checking') {
+      setMsg('Дождитесь завершения проверки Login ID');
+      return;
+    }
+    if (signinLoginIdStatus === 'not_found') {
+      setMsg('Login ID не найден');
       return;
     }
     setBusy(true);
@@ -61,6 +139,22 @@ export default function InlineAuthBlock({ onSuccess }: Props) {
     setMsg('');
     if (!supabase) {
       setMsg('Supabase не настроен');
+      return;
+    }
+    const loginIdValidationError = validateLoginId(signupLoginId);
+    if (loginIdValidationError) {
+      setMsg(loginIdValidationError);
+      return;
+    }
+    if (signupLoginIdStatus === 'checking') {
+      setMsg('Дождитесь завершения проверки Login ID');
+      return;
+    }
+    if (signupLoginIdStatus === 'taken') {
+      setMsg('Login ID уже занят');
+      return;
+    }
+    if (signupPassword.length < 6) {
       return;
     }
     if (signupPassword !== signupPasswordConfirm) {
@@ -125,6 +219,10 @@ export default function InlineAuthBlock({ onSuccess }: Props) {
               placeholder="unique login id"
               autoComplete="username"
             />
+            {signinLoginIdStatus === 'not_found' && <small className="am-inline-auth-hint is-error">Login ID не найден</small>}
+            {signinLoginIdStatus === 'invalid' && (
+              <small className="am-inline-auth-hint is-error">{validateLoginId(signinLoginId.trim().toLowerCase())}</small>
+            )}
           </label>
           <label className="am-inline-auth-label">
             Пароль
@@ -137,7 +235,11 @@ export default function InlineAuthBlock({ onSuccess }: Props) {
               autoComplete="current-password"
             />
           </label>
-          <button type="submit" className="am-btn am-btn--submit am-inline-auth-submit" disabled={busy}>
+          <button
+            type="submit"
+            className="am-btn am-btn--submit am-inline-auth-submit"
+            disabled={busy || signinLoginIdStatus === 'checking'}
+          >
             {busy ? 'Вход…' : 'Войти'}
           </button>
         </form>
@@ -153,6 +255,10 @@ export default function InlineAuthBlock({ onSuccess }: Props) {
               placeholder="unique login id"
               autoComplete="username"
             />
+            {signupLoginIdStatus === 'taken' && <small className="am-inline-auth-hint is-error">Login ID уже занят</small>}
+            {signupLoginIdStatus === 'invalid' && (
+              <small className="am-inline-auth-hint is-error">{validateLoginId(signupLoginId.trim().toLowerCase())}</small>
+            )}
           </label>
           <label className="am-inline-auth-label">
             Пароль
@@ -174,6 +280,9 @@ export default function InlineAuthBlock({ onSuccess }: Props) {
                 <VisibilityIcon off={showSignupPassword} />
               </button>
             </div>
+            {isSignupPasswordTooShort && (
+              <small className="am-inline-auth-hint is-error">Пароль должен быть минимум 6 символов</small>
+            )}
           </label>
           <label className="am-inline-auth-label">
             Confirm password
@@ -197,7 +306,11 @@ export default function InlineAuthBlock({ onSuccess }: Props) {
               autoComplete="nickname"
             />
           </label>
-          <button type="submit" className="am-btn am-btn--submit am-inline-auth-submit" disabled={busy}>
+          <button
+            type="submit"
+            className="am-btn am-btn--submit am-inline-auth-submit"
+            disabled={busy || signupLoginIdStatus === 'checking' || signupLoginIdStatus === 'taken' || isSignupPasswordTooShort}
+          >
             {busy ? 'Регистрация…' : 'Зарегистрироваться'}
           </button>
         </form>

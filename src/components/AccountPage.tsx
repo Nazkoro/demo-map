@@ -2,11 +2,20 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 
 import StatusToast from './StatusToast';
-import { checkNicknameTaken, sessionNickname, signInWithLoginId, signUpWithLoginId, validateNickname } from '../lib/auth';
+import {
+  checkLoginIdTaken,
+  checkNicknameTaken,
+  sessionNickname,
+  signInWithLoginId,
+  signUpWithLoginId,
+  validateLoginId,
+  validateNickname,
+} from '../lib/auth';
 import { supabase } from '../lib/supabase';
 
 type AuthMode = 'home' | 'signin' | 'signup';
 type ToastType = 'info' | 'success' | 'error';
+type LoginIdStatus = 'idle' | 'invalid' | 'checking' | 'found' | 'not_found' | 'available' | 'taken';
 type NicknameStatus = 'idle' | 'invalid' | 'checking' | 'available' | 'taken';
 
 function VisibilityIcon({ off }: { off: boolean }) {
@@ -35,16 +44,21 @@ export default function AccountPage() {
 
   const [signinLoginId, setSigninLoginId] = useState('');
   const [signinPassword, setSigninPassword] = useState('');
+  const [signinLoginIdStatus, setSigninLoginIdStatus] = useState<LoginIdStatus>('idle');
 
   const [signupLoginId, setSignupLoginId] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
   const [signupPasswordConfirm, setSignupPasswordConfirm] = useState('');
   const [signupNickname, setSignupNickname] = useState('');
+  const [signupLoginIdStatus, setSignupLoginIdStatus] = useState<LoginIdStatus>('idle');
   const [signupNicknameStatus, setSignupNicknameStatus] = useState<NicknameStatus>('idle');
   const [showSignupPassword, setShowSignupPassword] = useState(false);
+  const signinLoginCheckSeqRef = useRef(0);
+  const signupLoginCheckSeqRef = useRef(0);
   const nicknameCheckSeqRef = useRef(0);
 
   const languageItems = useMemo(() => ['Русский', 'English'], []);
+  const isSignupPasswordTooShort = signupPassword.length > 0 && signupPassword.length < 6;
   const showToast = (message: string, type: ToastType = 'info') => {
     setToast({ message, type, key: Date.now() });
   };
@@ -62,6 +76,70 @@ export default function AccountPage() {
       document.body.classList.remove('account-mode');
     };
   }, []);
+
+  useEffect(() => {
+    if (mode !== 'signin') {
+      setSigninLoginIdStatus('idle');
+      return;
+    }
+    const normalizedLoginId = signinLoginId.trim().toLowerCase();
+    if (!normalizedLoginId) {
+      setSigninLoginIdStatus('idle');
+      return;
+    }
+    if (validateLoginId(normalizedLoginId)) {
+      setSigninLoginIdStatus('invalid');
+      return;
+    }
+    const client = supabase;
+    if (!client) {
+      setSigninLoginIdStatus('idle');
+      return;
+    }
+    const currentRequest = ++signinLoginCheckSeqRef.current;
+    setSigninLoginIdStatus('checking');
+    const timeout = setTimeout(() => {
+      void checkLoginIdTaken(client, normalizedLoginId).then((taken) => {
+        if (currentRequest !== signinLoginCheckSeqRef.current) {
+          return;
+        }
+        setSigninLoginIdStatus(taken ? 'found' : 'not_found');
+      });
+    }, 450);
+    return () => clearTimeout(timeout);
+  }, [mode, signinLoginId]);
+
+  useEffect(() => {
+    if (mode !== 'signup') {
+      setSignupLoginIdStatus('idle');
+      return;
+    }
+    const normalizedLoginId = signupLoginId.trim().toLowerCase();
+    if (!normalizedLoginId) {
+      setSignupLoginIdStatus('idle');
+      return;
+    }
+    if (validateLoginId(normalizedLoginId)) {
+      setSignupLoginIdStatus('invalid');
+      return;
+    }
+    const client = supabase;
+    if (!client) {
+      setSignupLoginIdStatus('idle');
+      return;
+    }
+    const currentRequest = ++signupLoginCheckSeqRef.current;
+    setSignupLoginIdStatus('checking');
+    const timeout = setTimeout(() => {
+      void checkLoginIdTaken(client, normalizedLoginId).then((taken) => {
+        if (currentRequest !== signupLoginCheckSeqRef.current) {
+          return;
+        }
+        setSignupLoginIdStatus(taken ? 'taken' : 'available');
+      });
+    }, 450);
+    return () => clearTimeout(timeout);
+  }, [mode, signupLoginId]);
 
   useEffect(() => {
     if (mode !== 'signup') {
@@ -121,6 +199,14 @@ export default function AccountPage() {
       return;
     }
 
+    if (signinLoginIdStatus === 'checking') {
+      showToast('Дождитесь завершения проверки Login ID', 'info');
+      return;
+    }
+    if (signinLoginIdStatus === 'not_found') {
+      showToast('Такой Login ID не найден', 'error');
+      return;
+    }
     setBusy(true);
     const { error } = await signInWithLoginId(supabase, signinLoginId, signinPassword);
     setBusy(false);
@@ -141,6 +227,22 @@ export default function AccountPage() {
       return;
     }
 
+    const loginIdValidationError = validateLoginId(signupLoginId);
+    if (loginIdValidationError) {
+      showToast(loginIdValidationError, 'error');
+      return;
+    }
+    if (signupLoginIdStatus === 'checking') {
+      showToast('Дождитесь завершения проверки Login ID', 'info');
+      return;
+    }
+    if (signupLoginIdStatus === 'taken') {
+      showToast('Login ID уже занят', 'error');
+      return;
+    }
+    if (signupPassword.length < 6) {
+      return;
+    }
     if (signupPassword !== signupPasswordConfirm) {
       showToast('Пароли не совпадают', 'error');
       return;
@@ -252,6 +354,10 @@ export default function AccountPage() {
                   onChange={(e) => setSigninLoginId(e.target.value)}
                   placeholder="unique login id"
                 />
+                {signinLoginIdStatus === 'not_found' && <small className="account-field-hint is-error">Login ID не найден</small>}
+                {signinLoginIdStatus === 'invalid' && (
+                  <small className="account-field-hint is-error">{validateLoginId(signinLoginId.trim().toLowerCase())}</small>
+                )}
               </label>
               <label>
                 Password
@@ -262,7 +368,11 @@ export default function AccountPage() {
                   placeholder="Password"
                 />
               </label>
-              <button className="account-btn account-btn--primary" type="submit" disabled={busy}>
+              <button
+                className="account-btn account-btn--primary"
+                type="submit"
+                disabled={busy || signinLoginIdStatus === 'checking'}
+              >
                 {busy ? 'Signing in...' : 'Sign in'}
               </button>
               <button className="account-btn" type="button" onClick={() => setMode('signup')} disabled={busy}>
@@ -288,6 +398,10 @@ export default function AccountPage() {
                   onChange={(e) => setSignupLoginId(e.target.value)}
                   placeholder="unique login id"
                 />
+                {signupLoginIdStatus === 'taken' && <small className="account-field-hint is-error">Login ID уже занят</small>}
+                {signupLoginIdStatus === 'invalid' && (
+                  <small className="account-field-hint is-error">{validateLoginId(signupLoginId.trim().toLowerCase())}</small>
+                )}
               </label>
               <label>
                 Password
@@ -307,6 +421,9 @@ export default function AccountPage() {
                     <VisibilityIcon off={showSignupPassword} />
                   </button>
                 </div>
+                {isSignupPasswordTooShort && (
+                  <small className="account-field-hint is-error">Пароль должен быть минимум 6 символов</small>
+                )}
               </label>
               <label>
                 Confirm password
@@ -335,7 +452,14 @@ export default function AccountPage() {
               <button
                 className="account-btn account-btn--primary"
                 type="submit"
-                disabled={busy || signupNicknameStatus === 'checking' || signupNicknameStatus === 'taken'}
+                disabled={
+                  busy ||
+                  signupLoginIdStatus === 'checking' ||
+                  signupLoginIdStatus === 'taken' ||
+                  isSignupPasswordTooShort ||
+                  signupNicknameStatus === 'checking' ||
+                  signupNicknameStatus === 'taken'
+                }
               >
                 {busy ? 'Signing up...' : 'Sign up'}
               </button>

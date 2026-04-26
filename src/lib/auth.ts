@@ -1,6 +1,6 @@
 import type { Session, SupabaseClient, User } from '@supabase/supabase-js';
 
-const LOGIN_ID_PATTERN = /^[a-z0-9_]{3,20}$/;
+const LOGIN_ID_PATTERN = /^[a-z0-9-]{4,20}$/;
 const LOGIN_EMAIL_DOMAIN = 'login.local';
 const PROFILE_TABLE = 'profiles';
 
@@ -18,7 +18,7 @@ export function validateLoginId(value: string): string | null {
     return 'Введите Login ID';
   }
   if (!LOGIN_ID_PATTERN.test(normalized)) {
-    return 'Login ID: 3-20 символов, только латиница, цифры и "_"';
+    return 'Login ID: 4-20 символов, только латиница, цифры и "-"';
   }
   return null;
 }
@@ -87,6 +87,18 @@ function isRpcMissingError(error: unknown): boolean {
   );
 }
 
+function isLoginIdRpcMissingError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+  const maybeError = error as { code?: string; message?: string };
+  return (
+    maybeError.code === 'PGRST202' ||
+    maybeError.code === '42883' ||
+    (typeof maybeError.message === 'string' && maybeError.message.toLowerCase().includes('is_login_id_taken'))
+  );
+}
+
 async function isNicknameTakenViaRpc(client: SupabaseClient, nickname: string): Promise<boolean> {
   const normalizedNickname = normalizeNickname(nickname);
   if (!normalizedNickname) {
@@ -108,8 +120,36 @@ async function isNicknameTakenViaRpc(client: SupabaseClient, nickname: string): 
   return Boolean(data);
 }
 
+async function isLoginIdTakenViaRpc(client: SupabaseClient, loginId: string): Promise<boolean> {
+  const normalizedLoginId = normalizeLoginId(loginId);
+  if (!normalizedLoginId) {
+    return false;
+  }
+
+  const { data, error } = await client.rpc('is_login_id_taken', {
+    p_login_id: normalizedLoginId,
+  });
+  if (error) {
+    // Fallback для MVP: если RPC еще не создана, не блокируем поток.
+    if (isLoginIdRpcMissingError(error)) {
+      return false;
+    }
+    return false;
+  }
+
+  return Boolean(data);
+}
+
 export async function checkNicknameTaken(client: SupabaseClient, nickname: string): Promise<boolean> {
   return isNicknameTakenViaRpc(client, nickname);
+}
+
+export async function checkLoginIdTaken(client: SupabaseClient, loginId: string): Promise<boolean> {
+  const loginIdError = validateLoginId(loginId);
+  if (loginIdError) {
+    return false;
+  }
+  return isLoginIdTakenViaRpc(client, loginId);
 }
 
 export async function signInWithLoginId(
