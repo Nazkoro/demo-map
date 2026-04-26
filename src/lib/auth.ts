@@ -1,16 +1,15 @@
 import type { Session, SupabaseClient, User } from '@supabase/supabase-js';
 
 const LOGIN_ID_PATTERN = /^[a-z0-9_]{3,20}$/;
-const NICKNAME_PATTERN = /^[a-z0-9_]{2,30}$/;
 const LOGIN_EMAIL_DOMAIN = 'login.local';
-const PROFILE_TABLE = 'user_profiles';
+const PROFILE_TABLE = 'profiles';
 
 function normalizeLoginId(value: string): string {
   return value.trim().toLowerCase();
 }
 
 function normalizeNickname(value: string): string {
-  return value.trim().toLowerCase();
+  return value.trim();
 }
 
 export function validateLoginId(value: string): string | null {
@@ -29,8 +28,8 @@ export function validateNickname(value: string): string | null {
   if (!normalized) {
     return 'Введите никнейм';
   }
-  if (!NICKNAME_PATTERN.test(normalized)) {
-    return 'Никнейм: 2-30 символов, только латиница, цифры и "_"';
+  if (normalized.length < 3) {
+    return 'Никнейм: минимум 3 символа';
   }
   return null;
 }
@@ -64,16 +63,53 @@ export function sessionNickname(session: Session | null): string | null {
   return userNickname(session?.user ?? null);
 }
 
-async function upsertProfile(client: SupabaseClient, userId: string, loginId: string, nickname: string): Promise<void> {
+async function upsertProfile(client: SupabaseClient, userId: string, _loginId: string, nickname: string): Promise<void> {
   const { error } = await client
     .from(PROFILE_TABLE)
     .upsert(
-      { user_id: userId, login_id: normalizeLoginId(loginId), nickname: normalizeNickname(nickname), email: null },
-      { onConflict: 'user_id' },
+      { id: userId, nickname: normalizeNickname(nickname) },
+      { onConflict: 'id' },
     );
   if (error) {
     throw error;
   }
+}
+
+function isRpcMissingError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+  const maybeError = error as { code?: string; message?: string };
+  return (
+    maybeError.code === 'PGRST202' ||
+    maybeError.code === '42883' ||
+    (typeof maybeError.message === 'string' && maybeError.message.toLowerCase().includes('is_nickname_taken'))
+  );
+}
+
+async function isNicknameTakenViaRpc(client: SupabaseClient, nickname: string): Promise<boolean> {
+  const normalizedNickname = normalizeNickname(nickname);
+  if (!normalizedNickname) {
+    return false;
+  }
+
+  const { data, error } = await client.rpc('is_nickname_taken', {
+    p_nickname: normalizedNickname,
+  });
+  if (error) {
+    // Если RPC пока не создана или недоступна по RLS/правам, не блокируем регистрацию:
+    // ниже всё равно сработает защита по unique-индексу.
+    if (isRpcMissingError(error)) {
+      return false;
+    }
+    return false;
+  }
+
+  return Boolean(data);
+}
+
+export async function checkNicknameTaken(client: SupabaseClient, nickname: string): Promise<boolean> {
+  return isNicknameTakenViaRpc(client, nickname);
 }
 
 export async function signInWithLoginId(
@@ -114,6 +150,9 @@ export async function signUpWithLoginId(
 
   const normalizedLoginId = normalizeLoginId(loginId);
   const normalizedNickname = normalizeNickname(nickname);
+  if (await isNicknameTakenViaRpc(client, normalizedNickname)) {
+    return { error: 'Никнейм уже занят', needsEmailConfirmation: false };
+  }
   const { data, error } = await client.auth.signUp({
     email: loginIdToAuthEmail(normalizedLoginId),
     password,
@@ -125,10 +164,28 @@ export async function signUpWithLoginId(
     },
   });
   if (error) {
+    const normalizedMessage = error.message.toLowerCase();
+    if (normalizedMessage.includes('already registered') || normalizedMessage.includes('already exists')) {
+      return { error: 'Login ID уже занят', needsEmailConfirmation: false };
+    }
     return { error: error.message, needsEmailConfirmation: false };
   }
   if (data.user) {
-    await upsertProfile(client, data.user.id, normalizedLoginId, normalizedNickname);
+    try {
+      await upsertProfile(client, data.user.id, normalizedLoginId, normalizedNickname);
+    } catch (profileError) {
+      if (profileError && typeof profileError === 'object' && 'message' in profileError) {
+        const profileMessage = String(profileError.message).toLowerCase();
+        if (
+          profileMessage.includes('duplicate') ||
+          profileMessage.includes('unique') ||
+          profileMessage.includes('profiles_nickname_key')
+        ) {
+          return { error: 'Никнейм уже занят', needsEmailConfirmation: false };
+        }
+      }
+      throw profileError;
+    }
   }
   return { error: null, needsEmailConfirmation: !data.session };
 }

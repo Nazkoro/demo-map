@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 
-import { sessionNickname, signInWithLoginId, signUpWithLoginId } from '../lib/auth';
+import StatusToast from './StatusToast';
+import { checkNicknameTaken, sessionNickname, signInWithLoginId, signUpWithLoginId, validateNickname } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 
 type AuthMode = 'home' | 'signin' | 'signup';
+type ToastType = 'info' | 'success' | 'error';
+type NicknameStatus = 'idle' | 'invalid' | 'checking' | 'available' | 'taken';
 
 function VisibilityIcon({ off }: { off: boolean }) {
   return off ? (
@@ -27,6 +30,7 @@ export default function AccountPage() {
   const [mode, setMode] = useState<AuthMode>('home');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string>('');
+  const [toast, setToast] = useState<{ message: string; type: ToastType; key: number } | null>(null);
   const [currentNickname, setCurrentNickname] = useState<string | null>(null);
 
   const [signinLoginId, setSigninLoginId] = useState('');
@@ -36,9 +40,14 @@ export default function AccountPage() {
   const [signupPassword, setSignupPassword] = useState('');
   const [signupPasswordConfirm, setSignupPasswordConfirm] = useState('');
   const [signupNickname, setSignupNickname] = useState('');
+  const [signupNicknameStatus, setSignupNicknameStatus] = useState<NicknameStatus>('idle');
   const [showSignupPassword, setShowSignupPassword] = useState(false);
+  const nicknameCheckSeqRef = useRef(0);
 
   const languageItems = useMemo(() => ['Русский', 'English'], []);
+  const showToast = (message: string, type: ToastType = 'info') => {
+    setToast({ message, type, key: Date.now() });
+  };
 
   useEffect(() => {
     const root = document.getElementById('root');
@@ -53,6 +62,42 @@ export default function AccountPage() {
       document.body.classList.remove('account-mode');
     };
   }, []);
+
+  useEffect(() => {
+    if (mode !== 'signup') {
+      setSignupNicknameStatus('idle');
+      return;
+    }
+    const normalizedNickname = signupNickname.trim();
+    if (!normalizedNickname) {
+      setSignupNicknameStatus('idle');
+      return;
+    }
+    if (validateNickname(normalizedNickname)) {
+      setSignupNicknameStatus('invalid');
+      return;
+    }
+    const client = supabase;
+    if (!client) {
+      setSignupNicknameStatus('idle');
+      return;
+    }
+
+    const currentRequest = ++nicknameCheckSeqRef.current;
+    setSignupNicknameStatus('checking');
+    const timeout = setTimeout(() => {
+      void checkNicknameTaken(client, normalizedNickname).then((taken) => {
+        if (currentRequest !== nicknameCheckSeqRef.current) {
+          return;
+        }
+        setSignupNicknameStatus(taken ? 'taken' : 'available');
+      });
+    }, 450);
+
+    return () => {
+      clearTimeout(timeout);
+    };
+  }, [mode, signupNickname]);
 
   useEffect(() => {
     if (!supabase) {
@@ -72,7 +117,7 @@ export default function AccountPage() {
     e.preventDefault();
     setMsg('');
     if (!supabase) {
-      setMsg('Supabase не настроен');
+      showToast('Supabase не настроен', 'error');
       return;
     }
 
@@ -81,7 +126,7 @@ export default function AccountPage() {
     setBusy(false);
 
     if (error) {
-      setMsg(error);
+      showToast(error, 'error');
       return;
     }
 
@@ -92,12 +137,25 @@ export default function AccountPage() {
     e.preventDefault();
     setMsg('');
     if (!supabase) {
-      setMsg('Supabase не настроен');
+      showToast('Supabase не настроен', 'error');
       return;
     }
 
     if (signupPassword !== signupPasswordConfirm) {
-      setMsg('Пароли не совпадают');
+      showToast('Пароли не совпадают', 'error');
+      return;
+    }
+    const nicknameValidationError = validateNickname(signupNickname);
+    if (nicknameValidationError) {
+      showToast(nicknameValidationError, 'error');
+      return;
+    }
+    if (signupNicknameStatus === 'checking') {
+      showToast('Дождитесь завершения проверки никнейма', 'info');
+      return;
+    }
+    if (signupNicknameStatus === 'taken') {
+      showToast('Никнейм уже занят', 'error');
       return;
     }
 
@@ -106,7 +164,7 @@ export default function AccountPage() {
     setBusy(false);
 
     if (error) {
-      setMsg(error);
+      showToast(error, 'error');
       return;
     }
 
@@ -130,7 +188,7 @@ export default function AccountPage() {
     const { error } = await supabase.auth.signOut();
     setBusy(false);
     if (error) {
-      setMsg(error.message);
+      showToast(error.message, 'error');
       return;
     }
     setMsg('Вы вышли из аккаунта');
@@ -152,7 +210,7 @@ export default function AccountPage() {
                   <strong>Account</strong>
                   <small>
                     {currentNickname
-                      ? `Вы вошли как @${currentNickname}`
+                      ? `Вы вошли как: ${currentNickname}`
                       : 'Sign in to manage your nickname, password and activity.'}
                   </small>
                 </span>
@@ -267,8 +325,18 @@ export default function AccountPage() {
                   onChange={(e) => setSignupNickname(e.target.value)}
                   placeholder="Nickname shown on posts"
                 />
+                {signupNicknameStatus === 'checking' && <small className="account-field-hint">Проверяем никнейм...</small>}
+                {signupNicknameStatus === 'available' && <small className="account-field-hint is-ok">Никнейм свободен</small>}
+                {signupNicknameStatus === 'taken' && <small className="account-field-hint is-error">Никнейм уже занят</small>}
+                {signupNicknameStatus === 'invalid' && (
+                  <small className="account-field-hint is-error">{validateNickname(signupNickname.trim())}</small>
+                )}
               </label>
-              <button className="account-btn account-btn--primary" type="submit" disabled={busy}>
+              <button
+                className="account-btn account-btn--primary"
+                type="submit"
+                disabled={busy || signupNicknameStatus === 'checking' || signupNicknameStatus === 'taken'}
+              >
                 {busy ? 'Signing up...' : 'Sign up'}
               </button>
               <button className="account-btn" type="button" onClick={() => setMode('signin')} disabled={busy}>
@@ -327,6 +395,7 @@ export default function AccountPage() {
           </span>
         </NavLink>
       </nav>
+      {toast && <StatusToast key={toast.key} message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
     </div>
   );
 }

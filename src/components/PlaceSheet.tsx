@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { MouseEvent, PointerEvent } from 'react';
+import type { CSSProperties, MouseEvent, PointerEvent } from 'react';
 
 import type { Place, PlaceComment } from '../types';
 import { CATEGORIES, getFirstEmoji } from '../lib/categories';
@@ -165,7 +165,7 @@ export default function PlaceSheet({
     e.stopPropagation();
   };
 
-  const closeFullscreenImageFromPointer = (e: PointerEvent<Element>) => {
+  const closeFullscreenImageFromClick = (e: MouseEvent<Element>) => {
     stopImageViewerEvent(e);
     closeFullscreenImage();
   };
@@ -267,37 +267,29 @@ export default function PlaceSheet({
         </div>
 
         <div className="place-popup-scroll">
-          <div className="place-popup-media-row">
+          <div
+            className={`place-popup-media-row${place.imageUrls.length > 0 ? ' place-popup-media-row--gallery' : ''}`}
+            style={
+              place.imageUrls.length > 0
+                ? ({
+                    '--media-count': Math.max(1, Math.min(place.imageUrls.length, 5)),
+                  } as CSSProperties)
+                : undefined
+            }
+          >
             {place.imageUrls.length > 0 ? (
-              <>
-                <div className="place-popup-media-card place-popup-media-card--photo">
+              place.imageUrls.map((imageUrl, index) => (
+                <div key={`${place.id}-image-${index}`} className="place-popup-media-card place-popup-media-card--photo">
                   <button
                     type="button"
                     className="place-popup-media-image-btn"
-                    onClick={() => setFullscreenImage(place.imageUrls[0])}
+                    onClick={() => setFullscreenImage(imageUrl)}
                     aria-label="Открыть фото на весь экран"
                   >
-                    <img className="place-popup-media-image" src={place.imageUrls[0]} alt={place.name || 'Фото заведения'} />
+                    <img className="place-popup-media-image" src={imageUrl} alt={`${place.name || 'Фото'} ${index + 1}`} />
                   </button>
                 </div>
-                {place.imageUrls[1] ? (
-                  <div className="place-popup-media-card place-popup-media-card--photo">
-                    <button
-                      type="button"
-                      className="place-popup-media-image-btn"
-                      onClick={() => setFullscreenImage(place.imageUrls[1])}
-                      aria-label="Открыть фото на весь экран"
-                    >
-                      <img className="place-popup-media-image" src={place.imageUrls[1]} alt={`${place.name || 'Фото'} 2`} />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="place-popup-media-card">
-                    <div className="place-popup-media-emoji">{getFirstEmoji(place.categories)}</div>
-                    <p className="place-popup-media-caption">{place.imageUrls.length} фото</p>
-                  </div>
-                )}
-              </>
+              ))
             ) : (
               <>
                 <div className="place-popup-media-card">
@@ -464,16 +456,16 @@ export default function PlaceSheet({
           <button
             type="button"
             className="place-image-viewer__backdrop"
-            onPointerDown={closeFullscreenImageFromPointer}
-            onClick={stopImageViewerEvent}
+            onPointerDown={stopImageViewerEvent}
+            onClick={closeFullscreenImageFromClick}
             aria-label="Закрыть просмотр фото"
           />
           <div className="place-image-viewer__content" onPointerDown={stopImageViewerEvent} onClick={stopImageViewerEvent}>
             <button
               type="button"
               className="place-image-viewer__close"
-              onPointerDown={closeFullscreenImageFromPointer}
-              onClick={stopImageViewerEvent}
+              onPointerDown={stopImageViewerEvent}
+              onClick={closeFullscreenImageFromClick}
               aria-label="Закрыть"
             >
               ×
