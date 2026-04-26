@@ -69,10 +69,12 @@ export default function RecentRegistrationsPanel({ places, onSelectPlace, onClos
               <div className="map-recent-card-main">
                 <div className="map-recent-card-name-row">
                   <span className="map-recent-card-emoji">{getFirstEmoji(place.categories)}</span>
-                  <span className="map-recent-card-name">{place.name || 'Без названия'}</span>
-                  <span className="map-recent-card-price">
-                    {place.price > 0 ? formatRuNum(place.price) : '—'}
-                  </span>
+                  <div className="map-recent-card-namegroup">
+                    <span className="map-recent-card-name">{place.name || 'Без названия'}</span>
+                    <span className="map-recent-card-price">
+                      {place.price > 0 ? formatRuNum(place.price) : '—'}
+                    </span>
+                  </div>
                 </div>
                 <span className="map-recent-card-address">{place.address || 'Адрес не указан'}</span>
               </div>

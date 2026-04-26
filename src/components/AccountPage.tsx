@@ -200,11 +200,11 @@ export default function AccountPage() {
     }
 
     if (signinLoginIdStatus === 'checking') {
-      showToast('Дождитесь завершения проверки Login ID', 'info');
+      showToast('Дождитесь завершения проверки логина', 'info');
       return;
     }
     if (signinLoginIdStatus === 'not_found') {
-      showToast('Такой Login ID не найден', 'error');
+      showToast('Такой логин не найден', 'error');
       return;
     }
     setBusy(true);
@@ -233,11 +233,11 @@ export default function AccountPage() {
       return;
     }
     if (signupLoginIdStatus === 'checking') {
-      showToast('Дождитесь завершения проверки Login ID', 'info');
+      showToast('Дождитесь завершения проверки логина', 'info');
       return;
     }
     if (signupLoginIdStatus === 'taken') {
-      showToast('Login ID уже занят', 'error');
+      showToast('Логин уже занят', 'error');
       return;
     }
     if (signupPassword.length < 6) {
@@ -300,8 +300,8 @@ export default function AccountPage() {
   return (
     <div className="account-page">
       <div className="account-wrap">
-        <p className="account-kicker">Account</p>
-        <h1 className="account-title">Settings</h1>
+        <p className="account-kicker">Аккаунт</p>
+        <h1 className="account-title">Настройки</h1>
 
         <section className="account-card">
           {mode === 'home' && (
@@ -309,28 +309,28 @@ export default function AccountPage() {
               <div className="account-row account-row--head">
                 <span className="account-row-icon">◎</span>
                 <span className="account-row-main">
-                  <strong>Account</strong>
+                  <strong>Аккаунт</strong>
                   <small>
                     {currentNickname
                       ? `Вы вошли как: ${currentNickname}`
-                      : 'Sign in to manage your nickname, password and activity.'}
+                      : 'Войдите, чтобы управлять никнеймом, паролем и активностью.'}
                   </small>
                 </span>
               </div>
               {currentNickname ? (
                 <button type="button" className="account-row" onClick={handleSignOut} disabled={busy}>
                   <span className="account-row-icon">◌</span>
-                  <span>{busy ? 'Signing out...' : 'Sign out'}</span>
+                  <span>{busy ? 'Выход...' : 'Выйти'}</span>
                 </button>
               ) : (
                 <>
                   <button type="button" className="account-row" onClick={() => setMode('signin')}>
                     <span className="account-row-icon">◌</span>
-                    <span>Sign in</span>
+                    <span>Войти</span>
                   </button>
                   <button type="button" className="account-row" onClick={() => setMode('signup')}>
                     <span className="account-row-icon">◌</span>
-                    <span>Sign up</span>
+                    <span>Регистрация</span>
                   </button>
                 </>
               )}
@@ -340,32 +340,32 @@ export default function AccountPage() {
           {mode === 'signin' && (
             <form className="account-form" onSubmit={handleSignIn}>
               <div className="account-form-head">
-                <p>Settings</p>
+                <p>Настройки</p>
                 <button type="button" onClick={() => setMode('home')}>
-                  Back to account
+                  Назад к аккаунту
                 </button>
               </div>
-              <h2>Sign in</h2>
+              <h2>Вход</h2>
               <label>
-                Login ID
+                Логин
                 <input
                   type="text"
                   value={signinLoginId}
                   onChange={(e) => setSigninLoginId(e.target.value)}
-                  placeholder="unique login id"
+                  placeholder="уникальный логин"
                 />
-                {signinLoginIdStatus === 'not_found' && <small className="account-field-hint is-error">Login ID не найден</small>}
+                {signinLoginIdStatus === 'not_found' && <small className="account-field-hint is-error">Логин не найден</small>}
                 {signinLoginIdStatus === 'invalid' && (
                   <small className="account-field-hint is-error">{validateLoginId(signinLoginId.trim().toLowerCase())}</small>
                 )}
               </label>
               <label>
-                Password
+                Пароль
                 <input
                   type="password"
                   value={signinPassword}
                   onChange={(e) => setSigninPassword(e.target.value)}
-                  placeholder="Password"
+                  placeholder="Пароль"
                 />
               </label>
               <button
@@ -373,10 +373,10 @@ export default function AccountPage() {
                 type="submit"
                 disabled={busy || signinLoginIdStatus === 'checking'}
               >
-                {busy ? 'Signing in...' : 'Sign in'}
+                {busy ? 'Вход...' : 'Войти'}
               </button>
               <button className="account-btn" type="button" onClick={() => setMode('signup')} disabled={busy}>
-                Go to sign up
+                Перейти к регистрации
               </button>
             </form>
           )}
@@ -384,33 +384,33 @@ export default function AccountPage() {
           {mode === 'signup' && (
             <form className="account-form" onSubmit={handleSignUp}>
               <div className="account-form-head">
-                <p>Settings</p>
+                <p>Настройки</p>
                 <button type="button" onClick={() => setMode('home')}>
-                  Back to account
+                  Назад к аккаунту
                 </button>
               </div>
-              <h2>Sign up</h2>
+              <h2>Регистрация</h2>
               <label>
-                Login ID
+                Логин
                 <input
                   type="text"
                   value={signupLoginId}
                   onChange={(e) => setSignupLoginId(e.target.value)}
-                  placeholder="unique login id"
+                  placeholder="уникальный логин"
                 />
-                {signupLoginIdStatus === 'taken' && <small className="account-field-hint is-error">Login ID уже занят</small>}
+                {signupLoginIdStatus === 'taken' && <small className="account-field-hint is-error">Логин уже занят</small>}
                 {signupLoginIdStatus === 'invalid' && (
                   <small className="account-field-hint is-error">{validateLoginId(signupLoginId.trim().toLowerCase())}</small>
                 )}
               </label>
               <label>
-                Password
+                Пароль
                 <div className="account-password-wrap">
                   <input
                     type={showSignupPassword ? 'text' : 'password'}
                     value={signupPassword}
                     onChange={(e) => setSignupPassword(e.target.value)}
-                    placeholder="Password"
+                    placeholder="Пароль"
                   />
                   <button
                     type="button"
@@ -426,12 +426,12 @@ export default function AccountPage() {
                 )}
               </label>
               <label>
-                Confirm password
+                Подтвердите пароль
                 <input
                   type={showSignupPassword ? 'text' : 'password'}
                   value={signupPasswordConfirm}
                   onChange={(e) => setSignupPasswordConfirm(e.target.value)}
-                  placeholder="Re-enter your password"
+                  placeholder="Повторите пароль"
                 />
               </label>
               <label>
@@ -440,7 +440,7 @@ export default function AccountPage() {
                   type="text"
                   value={signupNickname}
                   onChange={(e) => setSignupNickname(e.target.value)}
-                  placeholder="Nickname shown on posts"
+                  placeholder="Никнейм, который видят другие"
                 />
                 {signupNicknameStatus === 'checking' && <small className="account-field-hint">Проверяем никнейм...</small>}
                 {signupNicknameStatus === 'available' && <small className="account-field-hint is-ok">Никнейм свободен</small>}
@@ -461,10 +461,10 @@ export default function AccountPage() {
                   signupNicknameStatus === 'taken'
                 }
               >
-                {busy ? 'Signing up...' : 'Sign up'}
+                {busy ? 'Регистрация...' : 'Зарегистрироваться'}
               </button>
               <button className="account-btn" type="button" onClick={() => setMode('signin')} disabled={busy}>
-                Go to sign in
+                Перейти ко входу
               </button>
             </form>
           )}

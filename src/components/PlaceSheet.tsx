@@ -635,7 +635,7 @@ export default function PlaceSheet({
                               handleReportComment(comment.authorName);
                             }}
                           >
-                            Report
+                            Пожаловаться
                           </button>
                         </div>
                       </details>

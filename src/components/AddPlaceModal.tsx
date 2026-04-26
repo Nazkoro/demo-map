@@ -88,10 +88,6 @@ export default function AddPlaceModal({ open, onClose, onSubmit, isAuthenticated
       alert('Подождите, изображения еще обрабатываются');
       return;
     }
-    if (images.length < 1) {
-      alert('Добавьте минимум 1 фото');
-      return;
-    }
     if (images.some((image) => image.size > MAX_IMAGE_SIZE_BYTES)) {
       alert(`Каждое фото должно быть не больше ${MAX_IMAGE_SIZE_MB} МБ`);
       return;
@@ -371,10 +367,10 @@ export default function AddPlaceModal({ open, onClose, onSubmit, isAuthenticated
           </div>
 
           <div className="am-field">
-            <label className="am-label">Фото *</label>
+            <label className="am-label">Фото (опционально)</label>
             <div className="am-image-box">
               <p className="am-image-count">
-                Images {images.length}/{MAX_IMAGES} (min 1, max {MAX_IMAGE_SIZE_MB} MB each)
+                Фото {images.length}/{MAX_IMAGES} (максимум {MAX_IMAGE_SIZE_MB} МБ каждое)
               </p>
               <div className="am-image-grid">
                 {imagePreviews.map((entry, index) => (

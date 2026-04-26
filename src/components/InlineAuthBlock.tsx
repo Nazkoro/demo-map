@@ -117,11 +117,11 @@ export default function InlineAuthBlock({ onSuccess }: Props) {
       return;
     }
     if (signinLoginIdStatus === 'checking') {
-      setMsg('Дождитесь завершения проверки Login ID');
+      setMsg('Дождитесь завершения проверки логина');
       return;
     }
     if (signinLoginIdStatus === 'not_found') {
-      setMsg('Login ID не найден');
+      setMsg('Логин не найден');
       return;
     }
     setBusy(true);
@@ -147,11 +147,11 @@ export default function InlineAuthBlock({ onSuccess }: Props) {
       return;
     }
     if (signupLoginIdStatus === 'checking') {
-      setMsg('Дождитесь завершения проверки Login ID');
+      setMsg('Дождитесь завершения проверки логина');
       return;
     }
     if (signupLoginIdStatus === 'taken') {
-      setMsg('Login ID уже занят');
+      setMsg('Логин уже занят');
       return;
     }
     if (signupPassword.length < 6) {
@@ -210,16 +210,16 @@ export default function InlineAuthBlock({ onSuccess }: Props) {
       {tab === 'signin' ? (
         <form className="am-inline-auth-form" onSubmit={handleSignIn}>
           <label className="am-inline-auth-label">
-            Login ID
+            Логин
             <input
               className="am-input"
               type="text"
               value={signinLoginId}
               onChange={(e) => setSigninLoginId(e.target.value)}
-              placeholder="unique login id"
+              placeholder="уникальный логин"
               autoComplete="username"
             />
-            {signinLoginIdStatus === 'not_found' && <small className="am-inline-auth-hint is-error">Login ID не найден</small>}
+            {signinLoginIdStatus === 'not_found' && <small className="am-inline-auth-hint is-error">Логин не найден</small>}
             {signinLoginIdStatus === 'invalid' && (
               <small className="am-inline-auth-hint is-error">{validateLoginId(signinLoginId.trim().toLowerCase())}</small>
             )}
@@ -246,16 +246,16 @@ export default function InlineAuthBlock({ onSuccess }: Props) {
       ) : (
         <form className="am-inline-auth-form" onSubmit={handleSignUp}>
           <label className="am-inline-auth-label">
-            Login ID
+            Логин
             <input
               className="am-input"
               type="text"
               value={signupLoginId}
               onChange={(e) => setSignupLoginId(e.target.value)}
-              placeholder="unique login id"
+              placeholder="уникальный логин"
               autoComplete="username"
             />
-            {signupLoginIdStatus === 'taken' && <small className="am-inline-auth-hint is-error">Login ID уже занят</small>}
+            {signupLoginIdStatus === 'taken' && <small className="am-inline-auth-hint is-error">Логин уже занят</small>}
             {signupLoginIdStatus === 'invalid' && (
               <small className="am-inline-auth-hint is-error">{validateLoginId(signupLoginId.trim().toLowerCase())}</small>
             )}
@@ -285,13 +285,13 @@ export default function InlineAuthBlock({ onSuccess }: Props) {
             )}
           </label>
           <label className="am-inline-auth-label">
-            Confirm password
+            Подтвердите пароль
             <input
               className="am-input"
               type={showSignupPassword ? 'text' : 'password'}
               value={signupPasswordConfirm}
               onChange={(e) => setSignupPasswordConfirm(e.target.value)}
-              placeholder="re-enter password"
+              placeholder="повторите пароль"
               autoComplete="new-password"
             />
           </label>
@@ -302,7 +302,7 @@ export default function InlineAuthBlock({ onSuccess }: Props) {
               type="text"
               value={signupNickname}
               onChange={(e) => setSignupNickname(e.target.value)}
-              placeholder="nickname shown on posts"
+              placeholder="никнейм, который видят другие"
               autoComplete="nickname"
             />
           </label>

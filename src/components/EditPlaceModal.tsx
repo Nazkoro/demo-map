@@ -328,7 +328,7 @@ export default function EditPlaceModal({ open, place, onClose, onSubmit }: Props
               <label className="am-label">Фото</label>
               <div className="am-image-box">
                 <p className="am-image-count">
-                  Images {totalImages}/{MAX_IMAGES} (max {MAX_IMAGE_SIZE_MB} MB each)
+                  Фото {totalImages}/{MAX_IMAGES} (максимум {MAX_IMAGE_SIZE_MB} МБ каждое)
                 </p>
                 <div className="am-image-grid">
                   {keepImageUrls.map((url, index) => (

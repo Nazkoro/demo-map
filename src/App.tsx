@@ -518,7 +518,7 @@ export default function App() {
 
   async function handleOpenSavedList() {
     if (!isAuthenticated || !currentUserId) {
-      showToast('Войдите в аккаунт, чтобы открыть saved list', 'info');
+      showToast('Войдите в аккаунт, чтобы открыть список сохраненных мест', 'info');
       return;
     }
 
@@ -530,7 +530,7 @@ export default function App() {
       setSavedPlaceIds(ids);
       setSavedListPlaces(list);
     } catch (e: unknown) {
-      showToast('Не удалось загрузить saved list: ' + (e instanceof Error ? e.message : String(e)), 'error');
+      showToast('Не удалось загрузить список сохраненных мест: ' + (e instanceof Error ? e.message : String(e)), 'error');
       setSavedListPlaces([]);
     } finally {
       setSavedListLoading(false);
@@ -841,9 +841,9 @@ export default function App() {
               <div className="map-filter-pill" role="status">
                 <span>
                   ~{priceMax.toLocaleString('ru-RU')}
-                  {selectedCategories.length > 0 ? ` · ${selectedCategories.length} cat.` : ''}
+                  {selectedCategories.length > 0 ? ` · ${selectedCategories.length} кат.` : ''}
                 </span>
-                <button type="button" onClick={handleClearPriceFilter} aria-label="Clear filters">
+                <button type="button" onClick={handleClearPriceFilter} aria-label="Очистить фильтры">
                   ×
                 </button>
               </div>
@@ -954,7 +954,7 @@ export default function App() {
         onDeleteComment={handleDeleteComment}
       />
 
-      {!isPlaceSheetOpen && (
+      {!isPlaceSheetOpen && !savedListOpen && (
         <nav className="map-bottom-nav" aria-label="Основная навигация">
           <NavLink to="/" end className={({ isActive }) => `map-bottom-nav__item${isActive ? ' is-active' : ''}`}>
             <span className="map-bottom-nav__icon" aria-hidden="true">

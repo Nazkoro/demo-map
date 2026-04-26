@@ -48,8 +48,8 @@ export default function FabStack({
         <button
           type="button"
           className={`map-fab${isSavedListOpen ? ' is-active' : ''}`}
-          title="Saved list"
-          aria-label="Открыть saved list"
+          title="Сохраненные места"
+          aria-label="Открыть список сохраненных мест"
           onClick={onOpenSavedList}
         >
           <svg
