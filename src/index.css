@@ -4257,8 +4257,21 @@ body {
 }
 
 .place-popup-media-emoji {
-  font-size: 2rem;
-  line-height: 1;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #f8fbff, #eef2f7);
+  color: #8b94a5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 0 0 1px rgba(203, 213, 225, 0.55);
+}
+
+.place-popup-media-emoji svg {
+  width: 26px;
+  height: 26px;
+  display: block;
 }
 
 .place-popup-media-caption {

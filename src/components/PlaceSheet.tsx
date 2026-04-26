@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, MouseEvent, PointerEvent } from 'react';
 
 import type { Place, PlaceComment } from '../types';
-import { CATEGORIES, getFirstEmoji } from '../lib/categories';
+import { CATEGORIES } from '../lib/categories';
 
 interface Props {
   place: Place | null;
@@ -65,6 +65,16 @@ function TrendIcon({ up }: { up: boolean }) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <path d={up ? 'M6 14l6-6 6 6' : 'M6 10l6 6 6-6'} fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function PlaceholderImageIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <rect x="3.5" y="4.5" width="17" height="15" rx="3" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      <circle cx="9" cy="9.3" r="1.7" fill="currentColor" />
+      <path d="M5.8 16.5l4.2-4 3.1 2.7 2.8-2.4 2.3 3.7" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -293,12 +303,12 @@ export default function PlaceSheet({
             ) : (
               <>
                 <div className="place-popup-media-card">
-                  <div className="place-popup-media-emoji">{getFirstEmoji(place.categories)}</div>
+                  <div className="place-popup-media-emoji" aria-hidden="true">
+                    <PlaceholderImageIcon />
+                  </div>
                   <p className="place-popup-media-caption">Нет изображения</p>
                 </div>
-                <button type="button" className="place-popup-add-button" disabled aria-label="Добавить фото (скоро)">
-                  +
-                </button>
+
               </>
             )}
           </div>
@@ -317,19 +327,21 @@ export default function PlaceSheet({
               <p className="place-popup-card-text">{place.dish || 'Не указано'}</p>
             </div>
             <div className="place-popup-info-card">
-              <p className="place-popup-card-label">Подано</p>
+              <p className="place-popup-card-label">дата добавления</p>
               <p className="place-popup-card-text">{formatDate(place.createdAt)}</p>
             </div>
           </div>
 
-          <div className="place-popup-note-card">
-            <p className="place-popup-card-label">Примечание</p>
-            <p className="place-popup-note-text">{place.note || 'Пока без текста.'}</p>
-          </div>
+          {place.note  && (
+              <div className="place-popup-note-card">
+                  <p className="place-popup-card-label">Примечание</p>
+                  <p className="place-popup-note-text">{place.note || 'Пока без текста.'}</p>
+              </div>
+              )}
 
           {place.hours && (
             <div className="place-popup-note-card">
-              <p className="place-popup-card-label">Часы работы</p>
+              <p className="place-popup-card-label">Время работы</p>
               <p className="place-popup-note-text">{place.hours}</p>
             </div>
           )}
